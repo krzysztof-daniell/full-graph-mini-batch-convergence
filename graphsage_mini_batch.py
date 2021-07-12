@@ -329,7 +329,7 @@ if __name__ == '__main__':
                 if best_num_epochs is None or best_accuracy['epoch'] < best_num_epochs:
                     best_num_epochs = best_accuracy['epoch']
 
-                break
+                # break
 
             if best_num_epochs is not None and epoch >= best_num_epochs:
                 break
