@@ -143,7 +143,8 @@ def validate(
 if __name__ == '__main__':
     torch.manual_seed(13)
 
-    accuracy_threshold = 0.78
+    accuracy_thresholds = [0.75, 0.76, 0.77, 0.78]
+    accuracy_threshold = accuracy_thresholds.pop(0)
 
     conn = Connection(
         client_token='OAOZHUKIZGHAYLOBMTMUCHYLRCCVMTELSPRQPQNDODUVKMXR')
@@ -246,7 +247,7 @@ if __name__ == '__main__':
 
     best_num_epochs = None
 
-    for i in range(experiment.observation_budget):
+    for experiment_index in range(1, 1 + experiment.observation_budget):
         suggestion = conn.experiments(experiment.id).suggestions().create()
         assignments = suggestion.assignments
 
@@ -287,7 +288,7 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(
             model.parameters(), lr=assignments['lr'])
 
-        print(f'Experiment: {i + 1} Assigments:')
+        print(f'Experiment: {experiment_index} Assigments:')
         pprint(assignments)
 
         epoch_times = []
@@ -342,3 +343,16 @@ if __name__ == '__main__':
                     epoch_times[:best_accuracy['epoch'] + 1])},
             ],
         )
+
+        if experiment_index % 1 == 0:
+            if len(accuracy_thresholds) > 1:
+                accuracy_threshold = accuracy_thresholds.pop(0)
+
+                experiment = conn.experiments(experiment.id).update(
+                    metrics=[{
+                        'name': 'test_accuracy',
+                        'objective': 'maximize',
+                        'strategy': 'constraint',
+                        'threshold': accuracy_threshold,
+                    }],
+                )
