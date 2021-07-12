@@ -239,7 +239,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    num_epochs = 300
+    num_epochs = 3
 
     train_idx = torch.nonzero(g.ndata['train_mask'], as_tuple=True)[0]
     valid_idx = torch.nonzero(g.ndata['valid_mask'], as_tuple=True)[0]
