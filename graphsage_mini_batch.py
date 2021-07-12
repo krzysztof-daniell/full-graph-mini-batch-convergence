@@ -239,13 +239,14 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    num_epochs = 50
+    num_epochs = 30
 
     train_idx = torch.nonzero(g.ndata['train_mask'], as_tuple=True)[0]
     valid_idx = torch.nonzero(g.ndata['valid_mask'], as_tuple=True)[0]
     test_idx = torch.nonzero(g.ndata['test_mask'], as_tuple=True)[0]
 
     best_num_epochs = None
+    best_training_time = None
 
     for experiment_index in range(1, 1 + experiment.observation_budget):
         suggestion = conn.experiments(experiment.id).suggestions().create()
@@ -328,11 +329,14 @@ if __name__ == '__main__':
             if test_accuracy >= accuracy_thresholds[-1]:
                 if best_num_epochs is None or best_accuracy['epoch'] < best_num_epochs:
                     best_num_epochs = best_accuracy['epoch']
+                    best_training_time = sum(
+                        epoch_times[:best_accuracy['epoch']])
 
                 break
 
-            if best_num_epochs is not None and epoch >= best_num_epochs:
-                break
+            if best_num_epochs is not None:
+                if epoch >= best_num_epochs and sum(epoch_times) >= best_training_time:
+                    break
 
         conn.experiments(experiment.id).observations().create(
             suggestion=suggestion.id,
@@ -340,7 +344,7 @@ if __name__ == '__main__':
                 {'name': 'test_accuracy', 'value': best_accuracy['value']},
                 {'name': 'num_epochs', 'value': best_accuracy['epoch']},
                 {'name': 'training_time', 'value': sum(
-                    epoch_times[:best_accuracy['epoch'] + 1])},
+                    epoch_times[:best_accuracy['epoch']])},
             ],
         )
 
