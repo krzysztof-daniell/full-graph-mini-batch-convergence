@@ -239,7 +239,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    num_epochs = 3
+    num_epochs = 50
 
     train_idx = torch.nonzero(g.ndata['train_mask'], as_tuple=True)[0]
     valid_idx = torch.nonzero(g.ndata['valid_mask'], as_tuple=True)[0]
@@ -304,7 +304,7 @@ if __name__ == '__main__':
                 model, loss_function, g, test_idx)
 
             print(
-                f'Epoch: {epoch + 1:03} '
+                f'Epoch: {epoch:03} '
                 f'Train Loss: {train_loss:.2f} '
                 # f'valid Loss: {valid_loss:.2f} '
                 f'Test Loss: {test_loss:.2f} '
@@ -344,7 +344,7 @@ if __name__ == '__main__':
             ],
         )
 
-        if experiment_index % 1 == 0:
+        if experiment_index % 100 == 0:
             if len(accuracy_thresholds) > 1:
                 accuracy_threshold = accuracy_thresholds.pop(0)
 
