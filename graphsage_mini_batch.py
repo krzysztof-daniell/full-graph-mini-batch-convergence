@@ -349,10 +349,21 @@ if __name__ == '__main__':
                 accuracy_threshold = accuracy_thresholds.pop(0)
 
                 experiment = conn.experiments(experiment.id).update(
-                    metrics=[{
-                        'name': 'test_accuracy',
-                        'objective': 'maximize',
-                        'strategy': 'constraint',
-                        'threshold': accuracy_threshold,
-                    }],
+                    metrics=[
+                        {
+                            'name': 'test_accuracy',
+                            'objective': 'maximize',
+                            'strategy': 'constraint',
+                            'threshold': accuracy_threshold,
+                        },
+                        {
+                            'name': 'num_epochs',
+                            'objective': 'minimize',
+                        },
+                        {
+                            'name': 'training_time',
+                            'objective': 'minimize',
+                            'strategy': 'store',
+                        },
+                    ],
                 )
