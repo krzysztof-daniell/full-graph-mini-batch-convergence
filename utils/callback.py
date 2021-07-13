@@ -1,5 +1,9 @@
 class Checkpoint:
-    def __init__(self, accuracy_threshold: float, patience: int = 5) -> None:
+    def __init__(
+        self,
+        accuracy_threshold: float = 1.0,
+        patience: int = 5,
+    ) -> None:
         self._accuracy_threshold = accuracy_threshold
         self._patience = patience
         self._lookback = 0
@@ -9,17 +13,21 @@ class Checkpoint:
 
     @property
     def best_accuracy(self):
-        return self.best_accuracy
+        return self._best_accuracy
 
     @property
     def best_epoch(self):
-        return self.best_epoch
+        return self._best_epoch
 
     @property
     def best_training_time(self):
-        return self.best_training_time
+        return self._best_training_time
 
-    def create(self, accuracy: float, epoch: int, training_time: float) -> None:
+    def create(
+        self, accuracy: float,
+        epoch: int,
+        training_time: float,
+    ) -> None:
         if self._best_accuracy is None or accuracy > self._best_accuracy:
             self._lookback = 0
             self._best_accuracy = accuracy
