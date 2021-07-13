@@ -150,7 +150,7 @@ if __name__ == '__main__':
     conn = Connection(
         client_token='OAOZHUKIZGHAYLOBMTMUCHYLRCCVMTELSPRQPQNDODUVKMXR')
     experiment = conn.experiments().create(
-        name=f'Mini-batch / OGBN-PRODUCTS / Target: {accuracy_threshold}',
+        name=f'Mini-batch / OGBN-PRODUCTS / Target: {accuracy_thresholds[-1]}',
         conditionals=[{
             'name': 'num_hidden_layers',
             'values': ['0', '1', '2'],
