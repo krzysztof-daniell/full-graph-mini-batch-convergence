@@ -228,7 +228,7 @@ if __name__ == '__main__':
             },
         ],
         observation_budget=int(os.environ.get(
-            'OBSERVATION_BUDGET', default=500)),
+            'OBSERVATION_BUDGET', default=100)),
         project='graphsage-convergence',
     )
 
@@ -337,7 +337,7 @@ if __name__ == '__main__':
                     ],
                 )
 
-        if experiment_index % 100 == 0:
+        if experiment_index % 25 == 0:
             if len(accuracy_thresholds) > 1:
                 accuracy_threshold = accuracy_thresholds.pop(0)
 
