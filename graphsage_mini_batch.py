@@ -244,9 +244,6 @@ if __name__ == '__main__':
     valid_idx = torch.nonzero(g.ndata['valid_mask'], as_tuple=True)[0]
     test_idx = torch.nonzero(g.ndata['test_mask'], as_tuple=True)[0]
 
-    best_num_epochs = None
-    best_training_time = None
-
     for experiment_index in range(1, 1 + experiment.observation_budget):
         suggestion = conn.experiments(experiment.id).suggestions().create()
         assignments = suggestion.assignments
@@ -285,8 +282,7 @@ if __name__ == '__main__':
         model = GraphSAGE(in_feats, hidden_feats, out_feats,
                           num_layers, activation, dropout).to(device)
         loss_function = nn.CrossEntropyLoss().to(device)
-        optimizer = torch.optim.Adam(
-            model.parameters(), lr=assignments['lr'])
+        optimizer = torch.optim.Adam(model.parameters(), lr=assignments['lr'])
 
         print(f'Experiment: {experiment_index} Assigments:')
         pprint(assignments)
@@ -356,7 +352,7 @@ if __name__ == '__main__':
                         {
                             'name': 'training_time',
                             'objective': 'minimize',
-                            'strategy': 'store',
+                            # 'strategy': 'store',
                         },
                     ],
                 )
