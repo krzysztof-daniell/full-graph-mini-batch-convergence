@@ -5,13 +5,14 @@ from timeit import default_timer
 from typing import Union
 
 import dgl
+from dgl._ffi.base import check_call
 import dgl.nn.pytorch as dglnn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sigopt import Connection
 
-from utils import process_dataset
+from utils import Checkpoint, process_dataset
 
 
 class GraphSAGE(nn.Module):
@@ -204,7 +205,7 @@ if __name__ == '__main__':
             {
                 'name': 'dropout',
                 'type': 'double',
-                'bounds': {'min': 1e-3, 'max': 999e-3},
+                'bounds': {'min': 0, 'max': 1},
                 # 'bounds': {'min': 1e-3, 'max': 999e-3},
                 'transformation': 'log',
             },
@@ -223,7 +224,7 @@ if __name__ == '__main__':
             {
                 'name': 'training_time',
                 'objective': 'minimize',
-                'strategy': 'store',
+                # 'strategy': 'store',
             },
         ],
         observation_budget=int(os.environ.get(
@@ -292,9 +293,8 @@ if __name__ == '__main__':
         print(f'Experiment: {experiment_index} Assigments:')
         pprint(assignments)
 
-        epoch_times = []
-        best_accuracy = None
-        early_stopping = 0
+        training_time = 0
+        checkpoint = Checkpoint(accuracy_thresholds[-1])
 
         for epoch in range(1, 1 + num_epochs):
             train_time, train_loss, train_accuracy = train(
@@ -315,38 +315,27 @@ if __name__ == '__main__':
                 f'Train epoch time: {train_time:.2f} '
             )
 
-            epoch_times.append(train_time)
+            training_time += train_time
+            checkpoint.create(test_accuracy, epoch, training_time)
 
-            if best_accuracy is None or test_accuracy > best_accuracy['value']:
-                best_accuracy = {'value': test_accuracy, 'epoch': epoch}
-                early_stopping = 0
-            elif best_accuracy is not None and test_accuracy < best_accuracy['value']:
-                early_stopping += 1
-
-                if early_stopping >= 5:
-                    break
-
-            if test_accuracy >= accuracy_thresholds[-1]:
-                if best_num_epochs is None or best_accuracy['epoch'] < best_num_epochs:
-                    best_num_epochs = best_accuracy['epoch']
-                    best_training_time = sum(
-                        epoch_times[:best_accuracy['epoch']])
-
-                break
-
-            if best_num_epochs is not None:
-                if epoch >= best_num_epochs and sum(epoch_times) >= best_training_time:
-                    break
-
-        conn.experiments(experiment.id).observations().create(
-            suggestion=suggestion.id,
-            values=[
-                {'name': 'test_accuracy', 'value': best_accuracy['value']},
-                {'name': 'num_epochs', 'value': best_accuracy['epoch']},
-                {'name': 'training_time', 'value': sum(
-                    epoch_times[:best_accuracy['epoch']])},
-            ],
-        )
+            if checkpoint.should_stop():
+                conn.experiments(experiment.id).observations().create(
+                    suggestion=suggestion.id,
+                    values=[
+                        {
+                            'name': 'test_accuracy', 
+                            'value': checkpoint.best_accuracy,
+                        },
+                        {
+                            'name': 'num_epochs', 
+                            'value': checkpoint.best_epoch,
+                        },
+                        {
+                            'name': 'training_time', 
+                            'value': checkpoint.best_training_time,
+                        },
+                    ],
+                )
 
         if experiment_index % 100 == 0:
             if len(accuracy_thresholds) > 1:
