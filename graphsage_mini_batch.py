@@ -317,23 +317,25 @@ if __name__ == '__main__':
             checkpoint.create(test_accuracy, epoch, training_time)
 
             if checkpoint.should_stop():
-                conn.experiments(experiment.id).observations().create(
-                    suggestion=suggestion.id,
-                    values=[
-                        {
-                            'name': 'test_accuracy', 
-                            'value': checkpoint.best_accuracy,
-                        },
-                        {
-                            'name': 'num_epochs', 
-                            'value': checkpoint.best_epoch,
-                        },
-                        {
-                            'name': 'training_time', 
-                            'value': checkpoint.best_training_time,
-                        },
-                    ],
-                )
+                break
+
+        conn.experiments(experiment.id).observations().create(
+            suggestion=suggestion.id,
+            values=[
+                {
+                    'name': 'test_accuracy',
+                    'value': checkpoint.best_accuracy,
+                },
+                {
+                    'name': 'num_epochs',
+                    'value': checkpoint.best_epoch,
+                },
+                {
+                    'name': 'training_time',
+                    'value': checkpoint.best_training_time,
+                },
+            ],
+        )
 
         if experiment_index % 25 == 0:
             if len(accuracy_thresholds) > 1:
