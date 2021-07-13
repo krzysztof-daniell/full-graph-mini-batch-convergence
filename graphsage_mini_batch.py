@@ -5,7 +5,6 @@ from timeit import default_timer
 from typing import Union
 
 import dgl
-from dgl._ffi.base import check_call
 import dgl.nn.pytorch as dglnn
 import torch
 import torch.nn as nn
