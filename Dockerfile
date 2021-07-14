@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y cmake \
   && pip install ogb sigopt \
   && git clone --recurse-submodules https://github.com/dmlc/dgl.git \
   && mkdir -p dgl/build && cd dgl/build \
-  && cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_AVX=ON -DBUILD_CPP_TEST=1 \
+  && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_CPP_TEST=1 \
   && make -j14 \
   && cd .. \
   && pip install -e python/
