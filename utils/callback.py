@@ -24,7 +24,8 @@ class Checkpoint:
         return self._best_training_time
 
     def create(
-        self, accuracy: float,
+        self,
+        accuracy: float,
         epoch: int,
         training_time: float,
     ) -> None:

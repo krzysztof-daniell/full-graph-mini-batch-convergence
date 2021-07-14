@@ -223,6 +223,7 @@ if __name__ == '__main__':
         ],
         observation_budget=int(os.environ.get(
             'OBSERVATION_BUDGET', default=100)),
+        num_solutions=3,
         project='graphsage-convergence',
     )
 
