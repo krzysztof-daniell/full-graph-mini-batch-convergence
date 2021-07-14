@@ -145,87 +145,92 @@ if __name__ == '__main__':
 
     conn = Connection(
         client_token='OAOZHUKIZGHAYLOBMTMUCHYLRCCVMTELSPRQPQNDODUVKMXR')
-    experiment = conn.experiments().create(
-        name=f'Mini-batch / OGBN-PRODUCTS / Target: max test accuracy',
-        conditionals=[{
-            'name': 'num_hidden_layers',
-            'values': ['0', '1', '2'],
-        }],
-        parameters=[
-            {
-                'name': 'lr',
-                'type': 'double',
-                'bounds': {'min': 1e-5, 'max': 99999e-5},
-                'transformation': 'log',
-            },
-            {
-                'name': 'batch_size_factor',
-                'type': 'int',
-                'bounds': {'min': 1, 'max': 8},
-                # 'bounds': {'min': 1, 'max': 16},
-            },
-            {
-                'name': 'fanout_input',
-                'conditions': {'num_hidden_layers': ['0', '1', '2']},
-                'type': 'int',
-                'bounds': {'min': 1, 'max': 30},
-                # 'bounds': {'min': 1, 'max': 50},
-            },
-            {
-                'name': 'fanout_hidden_1',
-                'conditions': {'num_hidden_layers': ['1', '2']},
-                'type': 'int',
-                'bounds': {'min': 1, 'max': 30},
-                # 'bounds': {'min': 1, 'max': 50},
-            },
-            {
-                'name': 'fanout_hidden_2',
-                'conditions': {'num_hidden_layers': ['2']},
-                'type': 'int',
-                'bounds': {'min': 1, 'max': 30},
-                # 'bounds': {'min': 1, 'max': 50},
-            },
-            {
-                'name': 'fanout_output',
-                'conditions': {'num_hidden_layers': ['0', '1', '2']},
-                'type': 'int',
-                'bounds': {'min': 1, 'max': 30},
-                # 'bounds': {'min': 1, 'max': 50},
-            },
-            {
-                'name': 'hidden_feats_factor',
-                'type': 'int',
-                'bounds': {'min': 1, 'max': 16},
-                # 'bounds': {'min': 1, 'max': 32},
-            },
-            {
-                'name': 'dropout',
-                'type': 'double',
-                'bounds': {'min': 1e-3, 'max': 999e-3},
-                'transformation': 'log',
-            },
-        ],
-        metrics=[
-            {
-                'name': 'test_accuracy',
-                'objective': 'maximize',
-            },
-            {
-                'name': 'num_epochs',
-                'objective': 'minimize',
-                'strategy': 'store',
-            },
-            {
-                'name': 'training_time',
-                'objective': 'minimize',
-                'strategy': 'store',
-            },
-        ],
-        observation_budget=int(os.environ.get(
-            'OBSERVATION_BUDGET', default=100)),
-        num_solutions=3,
-        project='graphsage-convergence',
-    )
+
+    experiment_id = os.environ.get('EXPERIMENT_ID', default=None)
+
+    if experiment_id is not None:
+        experiment = conn.experiments(experiment_id).fetch()
+    else:
+        experiment = conn.experiments().create(
+            name=f'Mini-batch / OGBN-PRODUCTS / Target: max test accuracy',
+            conditionals=[{
+                'name': 'num_hidden_layers',
+                'values': ['0', '1', '2'],
+            }],
+            parameters=[
+                {
+                    'name': 'lr',
+                    'type': 'double',
+                    'bounds': {'min': 1e-5, 'max': 99999e-5},
+                    'transformation': 'log',
+                },
+                {
+                    'name': 'batch_size_factor',
+                    'type': 'int',
+                    'bounds': {'min': 1, 'max': 8},
+                    # 'bounds': {'min': 1, 'max': 16},
+                },
+                {
+                    'name': 'fanout_input',
+                    'conditions': {'num_hidden_layers': ['0', '1', '2']},
+                    'type': 'int',
+                    'bounds': {'min': 1, 'max': 30},
+                    # 'bounds': {'min': 1, 'max': 50},
+                },
+                {
+                    'name': 'fanout_hidden_1',
+                    'conditions': {'num_hidden_layers': ['1', '2']},
+                    'type': 'int',
+                    'bounds': {'min': 1, 'max': 30},
+                    # 'bounds': {'min': 1, 'max': 50},
+                },
+                {
+                    'name': 'fanout_hidden_2',
+                    'conditions': {'num_hidden_layers': ['2']},
+                    'type': 'int',
+                    'bounds': {'min': 1, 'max': 30},
+                    # 'bounds': {'min': 1, 'max': 50},
+                },
+                {
+                    'name': 'fanout_output',
+                    'conditions': {'num_hidden_layers': ['0', '1', '2']},
+                    'type': 'int',
+                    'bounds': {'min': 1, 'max': 30},
+                    # 'bounds': {'min': 1, 'max': 50},
+                },
+                {
+                    'name': 'hidden_feats_factor',
+                    'type': 'int',
+                    'bounds': {'min': 1, 'max': 16},
+                    # 'bounds': {'min': 1, 'max': 32},
+                },
+                {
+                    'name': 'dropout',
+                    'type': 'double',
+                    'bounds': {'min': 1e-3, 'max': 999e-3},
+                    'transformation': 'log',
+                },
+            ],
+            metrics=[
+                {
+                    'name': 'test_accuracy',
+                    'objective': 'maximize',
+                },
+                {
+                    'name': 'num_epochs',
+                    'objective': 'minimize',
+                    'strategy': 'store',
+                },
+                {
+                    'name': 'training_time',
+                    'objective': 'minimize',
+                    'strategy': 'store',
+                },
+            ],
+            observation_budget=int(os.environ.get(
+                'OBSERVATION_BUDGET', default=100)),
+            project='graphsage-convergence',
+        )
 
     print(
         f'Created experiment: https://app.sigopt.com/experiment/{experiment.id}')
