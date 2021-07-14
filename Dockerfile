@@ -12,13 +12,13 @@ RUN apt-get update && apt-get install -y cmake \
   && conda create -n pytorch-ci python=3.9 \
   && conda activate pytorch-ci \
   && conda install pytorch cpuonly -c pytorch \
-  && pip install ogb sigopt \
   && git clone --recurse-submodules https://github.com/dmlc/dgl.git \
   && mkdir -p dgl/build && cd dgl/build \
   && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_CPP_TEST=1 \
   && make -j14 \
   && cd .. \
-  && pip install -e python/
+  && pip install -e python/ \
+  && pip install ogb sigopt
 
 ENV http_proxy=${http_proxy}
 ENV https_proxy=${https_proxy}
