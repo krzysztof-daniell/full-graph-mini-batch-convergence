@@ -204,7 +204,7 @@ if __name__ == '__main__':
             {
                 'name': 'dropout',
                 'type': 'double',
-                'bounds': {'min': 1e-3, 'max': 999e-3},
+                'bounds': {'min': 1e-2, 'max': 99e-2},
                 'transformation': 'log',
             },
         ],
