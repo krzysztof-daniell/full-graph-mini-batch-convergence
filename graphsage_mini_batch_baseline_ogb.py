@@ -18,15 +18,15 @@ class GraphSAGE(nn.Module):
         hidden_feats: int,
         out_feats: int,
         num_layers: int,
-        activation: Callable[[None], torch.Tensor],
-        dropout: float,
+        activation: Callable[[torch.Tensor], torch.Tensor],
+        dropout: float = None,
     ):
         super().__init__()
         self._hidden_feats = hidden_feats
         self._out_feats = out_feats
         self._num_layers = num_layers
         self._layers = nn.ModuleList()
-        self._dropout = nn.Dropout(dropout)
+        self._dropout = nn.Dropout(dropout) if dropout is not None else None
         self._activation = activation
 
         self._layers.append(dglnn.SAGEConv(in_feats, hidden_feats, 'mean'))
@@ -49,7 +49,9 @@ class GraphSAGE(nn.Module):
 
             if i < self._num_layers - 1:
                 x = self._activation(x)
-                x = self._dropout(x)
+
+                if self._dropout is not None:
+                    x = self._dropout(x)
 
         return x
 
@@ -61,7 +63,6 @@ class GraphSAGE(nn.Module):
 
             if i < self._num_layers - 1:
                 x = self._activation(x)
-                x = self._dropout(x)
 
         return x
 
