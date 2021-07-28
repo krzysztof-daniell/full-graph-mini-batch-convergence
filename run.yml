@@ -1,0 +1,20 @@
+# test on t3.large
+# resources:
+#   requests:
+#     cpu: 1.65
+#     memory: 6.5Gi
+#   limits:
+#     cpu: 1.8
+#     memory: 6.7Gi
+
+# m5.16xlarge
+resources:
+  requests:
+    cpu: 48
+    memory: 220Gi
+  limits:
+    cpu: 54
+    memory: 230Gi
+name: DGL OGB products run
+run: python full-batch-training-run.py -e 50
+image: dgl-ogb-products
