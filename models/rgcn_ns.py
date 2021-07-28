@@ -33,7 +33,7 @@ class RelGraphConvLayer(nn.Module):
 
         if weight:
             if self._use_basis:
-                self.basis = dglnn.WeightBasis(
+                self.weight = dglnn.WeightBasis(
                     (in_feats, out_feats), num_bases, self._num_rels)
             else:
                 self.weight = nn.Parameter(torch.Tensor(
@@ -80,9 +80,8 @@ class RelGraphConvLayer(nn.Module):
         g = g.local_var()
 
         if self._use_weight:
-            weight = self.basis if self._use_basis else self.weight
             weight_dict = {self._rel_names[i]: w.squeeze(
-                dim=1) for i, w in enumerate(torch.split(weight, 1, dim=0))}
+                dim=1) for i, w in enumerate(torch.split(self.weight, 1, dim=0))}
         else:
             weight_dict = {}
 
