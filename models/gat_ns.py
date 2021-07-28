@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 
-class GATNodeSampling(nn.Module):
+class GAT(nn.Module):
     def __init__(
         self,
         in_feats: int,

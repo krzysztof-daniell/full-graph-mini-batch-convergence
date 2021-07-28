@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 
-class GraphSAGENodeSampling(nn.Module):
+class GraphSAGE(nn.Module):
     def __init__(
         self,
         in_feats: int,
