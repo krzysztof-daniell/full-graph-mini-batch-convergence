@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.rgcn_ns import EntityClassify, train, validate
+from models.rgcn_hetero_ns import EntityClassify, train, validate
 from utils import process_dataset
 
 
