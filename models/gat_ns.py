@@ -133,8 +133,8 @@ def train(
     stop = default_timer()
     time = stop - start
 
-    total_loss /= step
-    total_accuracy /= step
+    total_loss /= step + 1
+    total_accuracy /= step + 1
 
     return time, total_loss, total_accuracy
 

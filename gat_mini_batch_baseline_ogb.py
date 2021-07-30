@@ -28,7 +28,7 @@ if __name__ == '__main__':
     num_layers = 3
     activation = F.relu
     feat_dropout = 0
-    attention_droput = 0
+    attention_dropout = 0
     batch_size = 512
     num_workers = 4
     fanouts = [10, 10, 10]
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         num_layers,
         activation, 
         feat_dropout, 
-        attention_droput,
+        attention_dropout,
     )
     loss_function = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)

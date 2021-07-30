@@ -83,7 +83,7 @@ def load_ogbn_mag(root: str = None):
         src, dst = hg_original.all_edges(etype=etype)
 
         subgraphs[etype] = (src, dst)
-        subgraphs[(etype[2], f'rev-{etype[1]}', etype[0])] = (src, dst)
+        subgraphs[(etype[2], f'rev-{etype[1]}', etype[0])] = (dst, src)
 
     hg = dgl.heterograph(subgraphs)
 
@@ -114,7 +114,7 @@ def process_dataset(name: str, root: str = None):
         dataset = dgl.data.RedditDataset(self_loop=True, raw_dir=root)
     elif name == 'ogbn-products':
         dataset = load_ogbn_products(root=root)
-    elif name == 'ogbn-products':
+    elif name == 'ogbn-mag':
         dataset = load_ogbn_mag(root=root)
 
     return dataset
