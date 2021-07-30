@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from timeit import default_timer
+from typing import Union
 
 import dgl
 import dgl.nn.pytorch as dglnn
@@ -51,8 +53,8 @@ class GraphSAGE(nn.Module):
         return x
 
     def inference(
-        self, 
-        g: dgl.DGLGraph, 
+        self,
+        g: dgl.DGLGraph,
         inputs: torch.Tensor,
     ) -> torch.Tensor:
         x = inputs
@@ -64,3 +66,74 @@ class GraphSAGE(nn.Module):
                 x = self._activation(x)
 
         return x
+
+
+def train(
+    model: nn.Module,
+    device: Union[str, torch.device],
+    optimizer: torch.optim.Optimizer,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    dataloader: dgl.dataloading.NodeDataLoader,
+) -> tuple[float]:
+    model.train()
+
+    total_loss = 0
+    total_accuracy = 0
+
+    start = default_timer()
+
+    for step, (_, _, blocks) in enumerate(dataloader):
+        optimizer.zero_grad()
+
+        blocks = [block.int().to(device) for block in blocks]
+
+        inputs = blocks[0].srcdata['feat']
+        labels = blocks[-1].dstdata['label']
+
+        logits = model(blocks, inputs)
+        loss = loss_function(logits, labels)
+
+        loss.backward()
+        optimizer.step()
+
+        _, indices = torch.max(logits, dim=1)
+        correct = torch.sum(indices == labels)
+        accuracy = correct.item() / len(labels)
+
+        total_loss += loss.item()
+        total_accuracy += accuracy
+
+    stop = default_timer()
+    time = stop - start
+
+    total_loss /= step
+    total_accuracy /= step
+
+    return time, total_loss, total_accuracy
+
+
+def validate(
+    model: nn.Module,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    g: dgl.DGLGraph,
+    mask: torch.Tensor,
+) -> tuple[float]:
+    features = g.ndata['feat']
+    labels = g.ndata['label']
+
+    model.eval()
+
+    start = default_timer()
+
+    with torch.no_grad():
+        logits = model.inference(g, features)
+        loss = loss_function(logits[mask], labels[mask])
+
+        _, indices = torch.max(logits[mask], dim=1)
+        correct = torch.sum(indices == labels[mask])
+        accuracy = correct.item() / len(labels[mask])
+
+    stop = default_timer()
+    time = stop - start
+
+    return time, loss, accuracy

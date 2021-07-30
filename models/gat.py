@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from timeit import default_timer
 
 import dgl
 import dgl.nn.pytorch as dglnn
@@ -74,3 +75,61 @@ class GAT(nn.Module):
         x = x.mean(dim=1)
 
         return x
+
+
+def train(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    g: dgl.DGLGraph,
+    mask: torch.Tensor,
+) -> tuple[float]:
+    features = g.ndata['feat']
+    labels = g.ndata['label']
+
+    model.train()
+    optimizer.zero_grad()
+
+    start = default_timer()
+
+    logits = model(g, features)
+    loss = loss_function(logits[mask], labels[mask])
+
+    loss.backward()
+    optimizer.step()
+
+    _, indices = torch.max(logits[mask], dim=1)
+    correct = torch.sum(indices == labels[mask])
+    accuracy = correct.item() / len(labels[mask])
+
+    stop = default_timer()
+    time = stop - start
+
+    return time, loss, accuracy
+
+
+def validate(
+    model: nn.Module,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    g: dgl.DGLGraph,
+    mask: torch.Tensor,
+) -> tuple[float]:
+    features = g.ndata['feat']
+    labels = g.ndata['label']
+
+    model.eval()
+
+    start = default_timer()
+
+    with torch.no_grad():
+        logits = model(g, features)
+        loss = loss_function(logits[mask], labels[mask])
+
+        _, indices = torch.max(logits[mask], dim=1)
+        correct = torch.sum(indices == labels[mask])
+        accuracy = correct.item() / len(labels[mask])
+
+    stop = default_timer()
+    time = stop - start
+
+    return time, loss, accuracy
