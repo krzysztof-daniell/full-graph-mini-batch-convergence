@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from timeit import default_timer
+from typing import Union
 
 import dgl
 import dgl.nn.pytorch as dglnn
@@ -33,7 +35,7 @@ class RelGraphConvLayer(nn.Module):
 
         if weight:
             if self._use_basis:
-                self.weight = dglnn.WeightBasis(
+                self.basis = dglnn.WeightBasis(
                     (in_feats, out_feats), num_bases, self._num_rels)
             else:
                 self.weight = nn.Parameter(torch.Tensor(
@@ -57,44 +59,46 @@ class RelGraphConvLayer(nn.Module):
         inputs: torch.Tensor,
         inputs_dst: torch.Tensor = None,
     ) -> torch.Tensor:
+        x = inputs
+
         if inputs_dst is not None:
-            x = inputs + \
-                torch.matmul(inputs_dst[ntype], self.self_loop_weight)
+            x += torch.matmul(inputs_dst[ntype], self.self_loop_weight)
 
         if self._use_bias:
-            x = x + self.bias
+            x += self.bias
 
         if self._activation is not None:
             x = self._activation(x)
 
         if self._dropout is not None:
-            x = self._dropout
+            x = self._dropout(x)
 
         return x
 
     def forward(
         self,
-        g: dgl.DGLHeteroGraph,
+        hg: dgl.DGLHeteroGraph,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        g = g.local_var()
+        hg = hg.local_var()
 
         if self._use_weight:
-            weight_dict = {self._rel_names[i]: w.squeeze(
-                dim=1) for i, w in enumerate(torch.split(self.weight, 1, dim=0))}
+            weight = self.basis() if self._use_basis else self.weight
+            weight_dict = {self._rel_names[i]: {'weight': w.squeeze(
+                dim=0)} for i, w in enumerate(torch.split(weight, 1, dim=0))}
         else:
             weight_dict = {}
 
         if self._self_loop is not None:
-            if g.is_block():
-                inputs_dst = {ntype: h[:g.num_dst_nodes(
+            if hg.is_block:
+                inputs_dst = {ntype: h[:hg.num_dst_nodes(
                     ntype)] for ntype, h in inputs.items()}
             else:
                 inputs_dst = inputs
         else:
             inputs_dst = None
 
-        x = self._conv(g, inputs, mod_kwargs=weight_dict)
+        x = self._conv(hg, inputs, mod_kwargs=weight_dict)
         x = {ntype: self._apply(ntype, h, inputs_dst)
              for ntype, h in x.items()}
 
@@ -188,7 +192,7 @@ class RelGraphEmbedding(nn.Module):
         x = {}
 
         for ntype in block.ntypes:
-            x[ntype] = self._embeddings[ntype][block.nodes(ntype)]
+            x[ntype] = self._embeddings[ntype][block.nodes(ntype).to(torch.int64)]  # TODO: why needs to be casted to int64?
 
         return x
 
@@ -214,7 +218,7 @@ class EntityClassify(nn.Module):
         self._num_rels = len(self._rel_names)
 
         if num_bases < 0 or num_bases > self._num_rels:
-            self._num_bases = self._num_bases
+            self._num_bases = self._num_rels
         else:
             self._num_bases = num_bases
 
@@ -257,8 +261,9 @@ class EntityClassify(nn.Module):
         self,
         blocks: tuple[dgl.DGLHeteroGraph],
     ) -> dict[str, torch.Tensor]:
+        x = self._embedding_layer(blocks[0])
+
         for layer, block in zip(self._layers, blocks):
-            x = self._embedding_layer(block)
             x = layer(block, x)
 
         return x
@@ -270,3 +275,74 @@ class EntityClassify(nn.Module):
             x = layer(self._g, x)
 
         return x
+
+
+def train(
+    model: nn.Module,
+    device: Union[str, torch.device],
+    optimizer: torch.optim.Optimizer,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    dataloader: dgl.dataloading.NodeDataLoader,
+    labels: torch.Tensor,
+    predict_category: str,
+) -> tuple[float]:
+    model.train()
+
+    total_loss = 0
+    total_accuracy = 0
+
+    start = default_timer()
+
+    for step, (_, out_nodes, blocks) in enumerate(dataloader):
+        optimizer.zero_grad()
+
+        out_nodes = out_nodes[predict_category]
+        blocks = [block.int().to(device) for block in blocks]
+
+        batch_labels = labels[out_nodes]
+
+        logits = model(blocks)[predict_category]
+        loss = loss_function(logits, batch_labels)
+
+        loss.backward()
+        optimizer.step()
+
+        _, indices = torch.max(logits, dim=1)
+        correct = torch.sum(indices == batch_labels)
+        accuracy = correct.item() / len(batch_labels)
+
+        total_loss += loss.item()
+        total_accuracy += accuracy
+
+    stop = default_timer()
+    time = stop - start
+
+    total_loss /= step + 1
+    total_accuracy /= step + 1
+
+    return time, total_loss, total_accuracy
+
+
+def validate(
+    model: nn.Module,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    mask: torch.Tensor,
+    labels: torch.Tensor,
+    predict_category: str,
+) -> tuple[float]:
+    model.eval()
+
+    start = default_timer()
+
+    with torch.no_grad():
+        logits = model.inference()[predict_category]
+        loss = loss_function(logits[mask], labels[mask])
+
+        _, indices = torch.max(logits[mask], dim=1)
+        correct = torch.sum(indices == labels[mask])
+        accuracy = correct.item() / len(labels[mask])
+
+    stop = default_timer()
+    time = stop - start
+
+    return time, loss, accuracy
