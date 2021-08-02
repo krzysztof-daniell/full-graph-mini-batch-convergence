@@ -1,0 +1,11 @@
+# m5.16xlarge
+resources:
+  requests:
+    cpu: 48
+    memory: 220Gi
+  limits:
+    cpu: 54
+    memory: 230Gi
+name: DGL OGB products
+run: python mini_batch_training_run.py -data 1 -e 40 -nw 4
+image: dgl-ogb-products-mini-batch

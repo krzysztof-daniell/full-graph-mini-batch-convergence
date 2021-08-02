@@ -1,4 +1,4 @@
-# experiment.yml
+# full_batch_experiment.yml
 name: DGL on OGB on M5's
 parameters: 
   - name: base_learning_rate

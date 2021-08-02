@@ -16,5 +16,5 @@ resources:
     cpu: 54
     memory: 230Gi
 name: DGL OGB products run
-run: python full-batch-training-run.py -e 50
-image: dgl-ogb-products
+run: python full_batch_training_run.py -data 0 -e 3
+image: dgl-ogb-products-full-batch

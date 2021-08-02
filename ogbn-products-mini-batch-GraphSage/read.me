@@ -1,0 +1,13 @@
+RUN LOCAL
+sigopt run -r run.yml 
+sigopt run python mini_batch_training_run.py [ARGS]
+
+CREATE EKS CLUSTER
+sigopt cluster create -f cluster.yml
+
+RUN ON CLUSTER
+sigopt cluster run -r mini_batch_run.yml
+sigopt cluster run python mini_batch_training_run.py [ARGS]
+
+EXPERIMENT ON CLUSTER
+sigopt cluster optimize -e mini_batch_experiment.yml -r mini_batch_run.yml
