@@ -1,0 +1,8 @@
+# cluster.yml
+provider: aws
+cluster_name: dgl-ogb
+cpu: 
+  instance_type: m5.16xlarge
+  max_nodes: 4
+  min_nodes: 4
+kubernetes_version: '1.18'
