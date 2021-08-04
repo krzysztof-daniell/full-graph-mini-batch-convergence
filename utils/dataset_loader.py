@@ -30,8 +30,8 @@ class OGBDataset:
         return self._g
 
 
-def load_ogbn_products(root: str = None):
-    dataset = DglNodePropPredDataset(name='ogbn-products', root=root)
+def load_ogbn_homogeneous(name: str, root: str = None) -> OGBDataset:
+    dataset = DglNodePropPredDataset(name, root=root)
 
     split_idx = dataset.get_idx_split()
 
@@ -63,7 +63,7 @@ def load_ogbn_products(root: str = None):
     return ogb_dataset
 
 
-def load_ogbn_mag(root: str = None):
+def load_ogbn_mag(root: str = None) -> OGBDataset:
     dataset = DglNodePropPredDataset(name='ogbn-mag', root=root)
 
     split_idx = dataset.get_idx_split()
@@ -110,10 +110,12 @@ def process_dataset(name: str, root: str = None):
     if root is None:
         root = 'datasets'
 
+    ogbn_homogeneous = ['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins']
+
     if name == 'reddit':
         dataset = dgl.data.RedditDataset(self_loop=True, raw_dir=root)
-    elif name == 'ogbn-products':
-        dataset = load_ogbn_products(root=root)
+    elif name in ogbn_homogeneous:
+        dataset = load_ogbn_homogeneous(name, root=root)
     elif name == 'ogbn-mag':
         dataset = load_ogbn_mag(root=root)
 
