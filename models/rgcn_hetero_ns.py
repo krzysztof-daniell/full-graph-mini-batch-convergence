@@ -31,7 +31,7 @@ class RelGraphConvLayer(nn.Module):
         self._use_bias = bias
         self._activation = activation
         self._dropout = nn.Dropout(dropout) if dropout is not None else None
-        self._self_loop = self_loop
+        self._use_self_loop = self_loop
 
         if weight:
             if self._use_basis:
@@ -89,7 +89,7 @@ class RelGraphConvLayer(nn.Module):
         else:
             weight_dict = {}
 
-        if self._self_loop is not None:
+        if self._use_self_loop:
             if hg.is_block:
                 inputs_dst = {ntype: h[:hg.num_dst_nodes(
                     ntype)] for ntype, h in inputs.items()}
@@ -173,37 +173,30 @@ class RelGraphEmbedding(nn.Module):
 
     def __init__(
         self,
-        g: dgl.DGLHeteroGraph,
+        hg: dgl.DGLHeteroGraph,
         embedding_size: int,
     ):
         super().__init__()
-        self._g = g
+        self._g = hg
         self._embeddings = nn.ParameterDict()
 
-        for ntype in g.ntypes:
+        for ntype in hg.ntypes:
             embedding = nn.Parameter(torch.Tensor(
-                g.num_nodes(ntype), embedding_size))
+                hg.num_nodes(ntype), embedding_size))
             nn.init.xavier_uniform_(
                 embedding, gain=nn.init.calculate_gain('relu'))
 
             self._embeddings[ntype] = embedding
 
-    def forward(self, block: dgl.DGLHeteroGraph) -> dict[str, torch.Tensor]:
-        x = {}
-
-        for ntype in block.ntypes:
-            x[ntype] = self._embeddings[ntype][block.nodes(ntype).to(torch.int64)]  # TODO: why needs to be casted to int64?
-
-        return x
-
-    def inference(self):
+    def forward(self) -> dict[str, torch.Tensor]:
         return self._embeddings
 
 
 class EntityClassify(nn.Module):
     def __init__(
         self,
-        g: dgl.DGLHeteroGraph,
+        hg: dgl.DGLHeteroGraph,
+        in_feats: int,
         hidden_feats: int,
         out_feats: int,
         num_bases: int,
@@ -213,8 +206,8 @@ class EntityClassify(nn.Module):
         self_loop: bool = False,
     ):
         super().__init__()
-        self._g = g
-        self._rel_names = sorted(list(set(g.etypes)))
+        self._g = hg
+        self._rel_names = sorted(list(set(hg.etypes)))
         self._num_rels = len(self._rel_names)
 
         if num_bases < 0 or num_bases > self._num_rels:
@@ -222,15 +215,14 @@ class EntityClassify(nn.Module):
         else:
             self._num_bases = num_bases
 
-        self._embedding_layer = RelGraphEmbedding(g, hidden_feats)
         self._layers = nn.ModuleList()
 
         self._layers.append(RelGraphConvLayer(
-            hidden_feats,
+            in_feats,
             hidden_feats,
             self._rel_names,
             self._num_bases,
-            weight=False,
+            # weight=False,
             activation=activation,
             dropout=dropout,
             self_loop=self_loop,
@@ -260,21 +252,37 @@ class EntityClassify(nn.Module):
     def forward(
         self,
         blocks: tuple[dgl.DGLHeteroGraph],
+        inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
-        x = self._embedding_layer(blocks[0])
+        x = inputs
 
         for layer, block in zip(self._layers, blocks):
             x = layer(block, x)
 
         return x
 
-    def inference(self):
-        x = self._embedding_layer.inference()
+    def inference(
+        self,
+        inputs: dict[str, torch.Tensor],
+    ) -> dict[str, torch.Tensor]:
+        x = inputs
 
         for layer in self._layers:
             x = layer(self._g, x)
 
         return x
+
+
+def extract_embedding(
+    node_embedding: dict[str, torch.Tensor],
+    in_nodes: dict[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
+    embedding = {}
+
+    for ntype, nid in in_nodes.items():
+        embedding[ntype] = node_embedding[ntype][nid]
+
+    return embedding
 
 
 def train(
@@ -283,6 +291,7 @@ def train(
     optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     dataloader: dgl.dataloading.NodeDataLoader,
+    node_embedding: dict[str, torch.Tensor],
     labels: torch.Tensor,
     predict_category: str,
 ) -> tuple[float]:
@@ -293,7 +302,7 @@ def train(
 
     start = default_timer()
 
-    for step, (_, out_nodes, blocks) in enumerate(dataloader):
+    for step, (in_nodes, out_nodes, blocks) in enumerate(dataloader):
         optimizer.zero_grad()
 
         out_nodes = out_nodes[predict_category]
@@ -301,7 +310,8 @@ def train(
 
         batch_labels = labels[out_nodes]
 
-        logits = model(blocks)[predict_category]
+        embedding = extract_embedding(node_embedding, in_nodes)
+        logits = model(blocks, embedding)[predict_category]
         loss = loss_function(logits, batch_labels)
 
         loss.backward()
@@ -327,6 +337,7 @@ def validate(
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     mask: torch.Tensor,
+    node_embedding: dict[str, torch.Tensor],
     labels: torch.Tensor,
     predict_category: str,
 ) -> tuple[float]:
@@ -335,7 +346,7 @@ def validate(
     start = default_timer()
 
     with torch.no_grad():
-        logits = model.inference()[predict_category]
+        logits = model.inference(node_embedding)[predict_category]
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)

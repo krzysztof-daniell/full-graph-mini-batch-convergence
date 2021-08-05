@@ -1,11 +1,11 @@
-import dgl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.rgcn_hetero_ns import EntityClassify, train, validate
+import dgl
+from models.rgcn_hetero_ns import (EntityClassify, RelGraphEmbedding, train,
+                                   validate)
 from utils import process_dataset
-
 
 if __name__ == '__main__':
     torch.manual_seed(13)
@@ -27,6 +27,7 @@ if __name__ == '__main__':
 
     labels = hg.nodes[predict_category].data['labels']
 
+    in_feats = 128
     hidden_feats = 128
     out_feats = dataset.num_classes
     num_bases = 2
@@ -50,8 +51,12 @@ if __name__ == '__main__':
         num_workers=num_workers,
     )
 
+    embedding_layer = RelGraphEmbedding(hg, in_feats)
+    embedding = embedding_layer()
+
     model = EntityClassify(
         hg,
+        in_feats,
         hidden_feats,
         out_feats,
         num_bases,
@@ -73,13 +78,14 @@ if __name__ == '__main__':
             optimizer,
             loss_function,
             train_dataloader,
+            embedding,
             labels,
             predict_category,
         )
         # valid_time, valid_loss, valid_accuracy = validate(
         #     model, loss_function, valid_idx, labels, predict_category)
         test_time, test_loss, test_accuracy = validate(
-            model, loss_function, test_idx, labels, predict_category)
+            model, loss_function, test_idx, embedding, labels, predict_category)
 
         training_time += train_time
 
