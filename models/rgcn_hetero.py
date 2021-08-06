@@ -136,28 +136,12 @@ class RelGraphEmbedding(nn.Module):
 
                 self.embeddings[ntype] = embedding
 
-    def forward(
-        self,
-        in_nodes: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        x = {}
-
-        for ntype, nid in in_nodes.items():
-            if self._node_feats[ntype] is None:
-                x[ntype] = self.node_embeddings[ntype](nid)
-            else:
-                x[ntype] = self._node_feats[ntype][nid] @ self.embeddings[ntype]
-
-        return x
-
-    def inference(self) -> dict[str, torch.Tensor]:
+    def forward(self) -> dict[str, torch.Tensor]:
         x = {}
 
         for ntype in self._hg.ntypes:
-            hg_nodes = self._hg.nodes(ntype)
-
             if self._node_feats[ntype] is None:
-                x[ntype] = self.node_embeddings[ntype](hg_nodes)
+                x[ntype] = self.node_embeddings[ntype](self._hg.nodes(ntype))
             else:
                 x[ntype] = self._node_feats[ntype] @ self.embeddings[ntype]
 
@@ -223,18 +207,6 @@ class EntityClassify(nn.Module):
 
     def forward(
         self,
-        blocks: tuple[dgl.DGLHeteroGraph],
-        inputs: dict[str, torch.Tensor],
-    ) -> dict[str, torch.Tensor]:
-        x = inputs
-
-        for layer, block in zip(self._layers, blocks):
-            x = layer(block, x)
-
-        return x
-
-    def inference(
-        self,
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
         x = inputs
@@ -244,56 +216,39 @@ class EntityClassify(nn.Module):
 
         return x
 
-
 def train(
     embedding_layer: nn.Module,
     model: nn.Module,
-    device: Union[str, torch.device],
     embedding_optimizer: torch.optim.Optimizer,
     model_optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    dataloader: dgl.dataloading.NodeDataLoader,
+    mask: torch.Tensor,
     labels: torch.Tensor,
     predict_category: str,
 ) -> tuple[float]:
     model.train()
 
-    total_loss = 0
-    total_accuracy = 0
-
     start = default_timer()
 
-    for step, (in_nodes, out_nodes, blocks) in enumerate(dataloader):
-        embedding_optimizer.zero_grad()
-        model_optimizer.zero_grad()
+    embedding_optimizer.zero_grad()
+    model_optimizer.zero_grad()
 
-        out_nodes = out_nodes[predict_category]
-        blocks = [block.int().to(device) for block in blocks]
+    embedding = embedding_layer()
+    logits = model(embedding)[predict_category]
+    loss = loss_function(logits[mask], labels[mask])
 
-        batch_labels = labels[out_nodes]
+    loss.backward()
+    model_optimizer.step()
+    embedding_optimizer.step()
 
-        embedding = embedding_layer(in_nodes)
-        logits = model(blocks, embedding)[predict_category]
-        loss = loss_function(logits, batch_labels)
-
-        loss.backward()
-        model_optimizer.step()
-        embedding_optimizer.step()
-
-        _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == batch_labels)
-        accuracy = correct.item() / len(batch_labels)
-
-        total_loss += loss.item()
-        total_accuracy += accuracy
+    _, indices = torch.max(logits[mask], dim=1)
+    correct = torch.sum(indices == labels[mask])
+    accuracy = correct.item() / len(labels[mask])
 
     stop = default_timer()
     time = stop - start
 
-    total_loss /= step + 1
-    total_accuracy /= step + 1
-
-    return time, total_loss, total_accuracy
+    return time, loss, accuracy
 
 
 def validate(
@@ -309,8 +264,8 @@ def validate(
     start = default_timer()
 
     with torch.no_grad():
-        embedding = embedding_layer.inference()
-        logits = model.inference(embedding)[predict_category]
+        embedding = embedding_layer()
+        logits = model(embedding)[predict_category]
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)

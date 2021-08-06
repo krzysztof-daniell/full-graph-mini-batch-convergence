@@ -1,12 +1,11 @@
 import itertools
 
-import dgl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.rgcn_hetero_ns import (EntityClassify, RelGraphEmbedding, train,
-                                   validate)
+from models.rgcn_hetero import (EntityClassify, RelGraphEmbedding, train,
+                                validate)
 from utils import process_dataset
 
 if __name__ == '__main__':
@@ -18,7 +17,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    num_epochs = 5
+    num_epochs = 50
 
     train_idx = torch.nonzero(
         hg.nodes[predict_category].data['train_mask'], as_tuple=True)[0]
@@ -44,22 +43,8 @@ if __name__ == '__main__':
     activation = F.relu
     dropout = 0.5
     self_loop = True
-    batch_size = 1024
-    num_workers = 4
-    fanouts = [25, 20]
-    embedding_lr = 0.08
+    embedding_lr = 0.01
     model_lr = 0.01
-
-    sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
-    train_dataloader = dgl.dataloading.NodeDataLoader(
-        hg,
-        {predict_category: train_idx},
-        sampler,
-        batch_size=batch_size,
-        shuffle=True,
-        drop_last=False,
-        num_workers=num_workers,
-    )
 
     embedding_layer = RelGraphEmbedding(hg, in_feats, num_nodes, node_feats)
     model = EntityClassify(
@@ -88,11 +73,10 @@ if __name__ == '__main__':
         train_time, train_loss, train_accuracy = train(
             embedding_layer,
             model,
-            device,
             embedding_optimizer,
             model_optimizer,
             loss_function,
-            train_dataloader,
+            train_idx,
             labels,
             predict_category,
         )
