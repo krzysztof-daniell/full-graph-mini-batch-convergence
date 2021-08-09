@@ -106,14 +106,13 @@ class RelGraphConvLayer(nn.Module):
 
 
 class RelGraphEmbedding(nn.Module):
-    """This one is from benchmarks"""
-
     def __init__(
         self,
         hg: dgl.DGLHeteroGraph,
         embedding_size: int,
         num_nodes: dict[str, int],
         node_feats: dict[str, torch.Tensor],
+        node_feats_projection: bool,
     ):
         super().__init__()
         self._hg = hg
@@ -123,12 +122,12 @@ class RelGraphEmbedding(nn.Module):
 
         for ntype in hg.ntypes:
             if node_feats[ntype] is None:
-                sparse_embedding = nn.Embedding(
+                node_embedding = nn.Embedding(
                     num_nodes[ntype], embedding_size, sparse=True)
-                nn.init.uniform_(sparse_embedding.weight, -1, 1)
+                nn.init.uniform_(node_embedding.weight, -1, 1)
 
-                self.node_embeddings[ntype] = sparse_embedding
-            else:
+                self.node_embeddings[ntype] = node_embedding
+            elif node_feats[ntype] is not None and node_feats_projection:
                 input_embedding_size = node_feats[ntype].shape[-1]
                 embedding = nn.Parameter(torch.Tensor(
                     input_embedding_size, embedding_size))
@@ -140,10 +139,15 @@ class RelGraphEmbedding(nn.Module):
         x = {}
 
         for ntype in self._hg.ntypes:
+            hg_nodes = self._hg.nodes(ntype)
+
             if self._node_feats[ntype] is None:
-                x[ntype] = self.node_embeddings[ntype](self._hg.nodes(ntype))
+                x[ntype] = self.node_embeddings[ntype](hg_nodes)
             else:
-                x[ntype] = self._node_feats[ntype] @ self.embeddings[ntype]
+                if self._node_feats_projection:
+                    x[ntype] = self._node_feats[ntype] @ self.embeddings[ntype]
+                else:
+                    x[ntype] = self._node_feats[ntype]
 
         return x
 
@@ -178,7 +182,6 @@ class EntityClassify(nn.Module):
             hidden_feats,
             self._rel_names,
             self._num_bases,
-            # weight=False,
             activation=activation,
             dropout=dropout,
             self_loop=self_loop,

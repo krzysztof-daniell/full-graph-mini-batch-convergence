@@ -44,6 +44,7 @@ if __name__ == '__main__':
     activation = F.relu
     dropout = 0.5
     self_loop = True
+    node_feats_projection = False
     batch_size = 1024
     num_workers = 4
     fanouts = [25, 20]
@@ -61,7 +62,13 @@ if __name__ == '__main__':
         num_workers=num_workers,
     )
 
-    embedding_layer = RelGraphEmbedding(hg, in_feats, num_nodes, node_feats)
+    embedding_layer = RelGraphEmbedding(
+        hg,
+        in_feats,
+        num_nodes,
+        node_feats,
+        node_feats_projection,
+    )
     model = EntityClassify(
         hg,
         in_feats,
@@ -76,9 +83,13 @@ if __name__ == '__main__':
 
     loss_function = nn.CrossEntropyLoss().to(device)
 
-    all_parameters = itertools.chain(
-        model.parameters(), embedding_layer.embeddings.parameters())
-    model_optimizer = torch.optim.Adam(all_parameters, lr=model_lr)
+    if node_feats_projection:
+        all_parameters = itertools.chain(
+            model.parameters(), embedding_layer.embeddings.parameters())
+        model_optimizer = torch.optim.Adam(all_parameters, lr=model_lr)
+    else:
+        model_optimizer = torch.optim.Adam(model.parameters(), lr=model_lr)
+
     embedding_optimizer = torch.optim.SparseAdam(
         list(embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
 
