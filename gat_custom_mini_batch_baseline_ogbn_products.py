@@ -37,7 +37,6 @@ if __name__ == '__main__':
     use_symmetric_norm = False
 
     batch_size = (len(train_idx) + 29) // 30  # 6554
-    print(batch_size)
     num_workers = 4
     fanouts = [10, 10, 10]
     lr = 0.01
@@ -71,6 +70,7 @@ if __name__ == '__main__':
         allow_zero_in_degree=allow_zero_in_degree,
         use_symmetric_norm=use_symmetric_norm,
     )
+    
     loss_function = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 

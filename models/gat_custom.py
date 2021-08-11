@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from timeit import default_timer
-from typing import Union
 
 import dgl
 import dgl.function as fn
@@ -240,34 +239,6 @@ class GAT(nn.Module):
 
     def forward(
         self,
-        blocks: tuple[dgl.DGLGraph],
-        inputs: torch.Tensor,
-    ) -> torch.Tensor:
-        x = self._input_dropout(inputs)
-
-        for i in range(self._num_layers):
-            if self._edge_encoder is not None:
-                efeat = blocks[i].edata['feat']
-
-                efeat_embedding = self._edge_encoder[i](efeat)
-                efeat_embedding = F.relu(efeat_embedding, inplace=True)
-            else:
-                efeat_embedding = None
-
-            x = self._convs[i](blocks[i], x, efeat_embedding).flatten(1, -1)
-            x = self._norms[i](x)
-
-            if self._activation is not None:
-                x = self._activation(x, inplace=True)
-
-            x = self._dropout(x)
-
-        x = self._fc_prediction(x)
-
-        return x
-
-    def inference(
-        self,
         g: dgl.DGLGraph,
         inputs: torch.Tensor,
     ) -> torch.Tensor:
@@ -297,46 +268,34 @@ class GAT(nn.Module):
 
 def train(
     model: nn.Module,
-    device: Union[str, torch.device],
     optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    dataloader: dgl.dataloading.NodeDataLoader,
+    g: dgl.DGLGraph,
+    mask: torch.Tensor,
 ) -> tuple[float]:
     model.train()
 
-    total_loss = 0
-    total_accuracy = 0
-
     start = default_timer()
 
-    for step, (_, _, blocks) in enumerate(dataloader):
-        optimizer.zero_grad()
+    optimizer.zero_grad()
 
-        blocks = [block.int().to(device) for block in blocks]
+    inputs = g.ndata['feat']
+    labels = g.ndata['label']
 
-        inputs = blocks[0].srcdata['feat']
-        labels = blocks[-1].dstdata['label']
+    logits = model(g, inputs)
+    loss = loss_function(logits[mask], labels[mask])
 
-        logits = model(blocks, inputs)
-        loss = loss_function(logits, labels)
+    loss.backward()
+    optimizer.step()
 
-        loss.backward()
-        optimizer.step()
-
-        _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == labels)
-        accuracy = correct.item() / len(labels)
-
-        total_loss += loss.item()
-        total_accuracy += accuracy
+    _, indices = torch.max(logits[mask], dim=1)
+    correct = torch.sum(indices == labels[mask])
+    accuracy = correct.item() / len(labels[mask])
 
     stop = default_timer()
     time = stop - start
 
-    total_loss /= step + 1
-    total_accuracy /= step + 1
-
-    return time, total_loss, total_accuracy
+    return time, loss, accuracy
 
 
 def validate(
@@ -353,7 +312,7 @@ def validate(
     start = default_timer()
 
     with torch.no_grad():
-        logits = model.inference(g, features)
+        logits = model(g, features)
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)
