@@ -4,8 +4,8 @@ from typing import Union
 
 import dgl
 import dgl.function as fn
-import dgl.nn.pytorch as dglnn
 import torch
+import torch.functional as F
 import torch.nn as nn
 from dgl.ops import edge_softmax
 from dgl.utils import expand_as_pair
@@ -30,6 +30,10 @@ class GATConv(nn.Module):
         super().__init__()
         self._out_feats = out_feats
         self._num_heads = num_heads
+        self._attn_dropout = nn.Dropout(attn_dropout)
+        self._edge_dropout = edge_dropout
+        self._leaky_relu = nn.LeakyReLU(negative_slope)
+        self._activation = activation
         self._allow_zero_in_degree = allow_zero_in_degree
         self._use_symmetric_norm = use_symmetric_norm
         self._in_src_feats, self._in_dst_feats = expand_as_pair(node_in_feats)
@@ -58,11 +62,6 @@ class GATConv(nn.Module):
                 edge_in_feats, num_heads, bias=False)
         else:
             self._attn_fc_edge = None
-
-        self._attn_dropout = nn.Dropout(attn_dropout)
-        self._edge_dropout = nn.Dropout(edge_dropout)
-        self._leaky_relu = nn.LeakyReLU(negative_slope)
-        self._activation = activation
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('relu')
@@ -112,7 +111,7 @@ class GATConv(nn.Module):
 
         feat_fc_src = self._fc_src(node_inputs).view(
             -1, self._num_heads, self._out_feats)
-        feat_fc_dst = self._fc_dst(node_inputs).view(
+        feat_fc_dst = self._fc_dst(node_inputs_dst).view(
             -1, self._num_heads, self._out_feats)
 
         attn_src = self._attn_fc_src(node_inputs).view(
@@ -180,66 +179,95 @@ class GAT(nn.Module):
         edge_in_feats: int,
         hidden_feats: int,
         out_feats: int,
-        heads: int,
+        num_heads: int,
         num_layers: int,
-        activation: Callable[[torch.Tensor], torch.Tensor],
-        feat_drop: float = 0,
-        attn_drop: float = 0,
+        edge_embedding: int,
+        input_dropout: float = 0,
+        attn_dropout: float = 0,
+        edge_dropout: float = 0,
+        dropout: float = 0,
         negative_slope: float = 0.2,
-        residual: bool = False,
+        residual: bool = True,
+        activation: Callable[[torch.Tensor], torch.Tensor] = None,
+        use_attn_dst: bool = True,
+        allow_zero_in_degree: bool = True,
+        use_symmetric_norm: bool = False,
     ):
         super().__init__()
+        self._num_heads = num_heads
         self._num_layers = num_layers
-        self._layers = nn.ModuleList()
+        self._input_dropout = nn.Dropout(input_dropout)
+        self._dropout = nn.Dropout(dropout)
+        self._residual = residual
+        self._activation = activation
 
-        self._layers.append(dglnn.GATConv(
-            in_feats,
-            hidden_feats,
-            num_heads=heads[0],
-            feat_drop=feat_drop,
-            attn_drop=attn_drop,
-            negative_slope=negative_slope,
-            residual=False,
-            activation=activation,
-        ))
+        self._node_encoder = nn.Linear(node_in_feats, hidden_feats)
 
-        for i in range(1, num_layers - 1):
-            self._layers.append(dglnn.GATConv(
-                hidden_feats * heads[i - 1],
-                hidden_feats,
-                num_heads=heads[i],
-                feat_drop=feat_drop,
-                attn_drop=attn_drop,
+        if edge_embedding > 0:
+            self._edge_encoder = nn.ModuleList()
+        else:
+            self._edge_encoder = None
+
+        self._convs = nn.ModuleList()
+        self._norms = nn.ModuleList()
+
+        for i in range(num_layers):
+            in_hidden = num_heads * hidden_feats if i > 0 else node_in_feats
+            out_hidden = hidden_feats
+
+            if self._edge_encoder is not None:
+                self._edge_encoder.append(
+                    nn.Linear(edge_in_feats, edge_embedding))
+
+            self._convs.append(GATConv(
+                in_hidden,
+                edge_embedding,
+                out_hidden,
+                num_heads,
+                attn_dropout=attn_dropout,
+                edge_dropout=edge_dropout,
                 negative_slope=negative_slope,
                 residual=residual,
-                activation=activation,
+                use_attn_dst=use_attn_dst,
+                allow_zero_in_degree=allow_zero_in_degree,
+                use_symmetric_norm=use_symmetric_norm,
             ))
+            self._norms.append(nn.BatchNorm1d(num_heads * out_hidden))
 
-        self._layers.append(dglnn.GATConv(
-            hidden_feats * heads[-2],
-            out_feats,
-            num_heads=heads[-1],
-            feat_drop=feat_drop,
-            attn_drop=attn_drop,
-            negative_slope=negative_slope,
-            residual=residual,
-            activation=None,
-        ))
+        self._fc_prediction = nn.Linear(num_heads * hidden_feats, out_feats)
 
     def forward(
         self,
         blocks: tuple[dgl.DGLGraph],
         inputs: torch.Tensor,
     ) -> torch.Tensor:
-        x = inputs
+        x = self._input_dropout(inputs)
+        x_last = None
 
-        for i, (layer, block) in enumerate(zip(self._layers, blocks)):
-            x = layer(block, x)
+        for i in range(self._num_layers):
+            if self._edge_encoder is not None:
+                efeat = blocks[i].edata['feat']
 
-            if i < self._num_layers - 1:
-                x = x.flatten(start_dim=1)
+                efeat_embedding = self._edge_encoder[i](efeat)
+                efeat_embedding = F.relu(efeat_embedding, inplace=True)
+            else:
+                efeat_embedding = None
 
-        x = x.mean(dim=1)
+            x = self._convs[i](blocks[i], x, efeat_embedding).flatten(1, -1)
+
+            if self._residual and x_last is not None:
+                x += x_last[:x.shape[0], :]
+
+            x_last = x
+
+            x = self._norms[i](x)
+
+            if self._activation is not None:
+                x = self._activation(x, inplace=True)
+
+            x = self._dropout(x)
+
+        x = self._fc_prediction(x)
 
         return x
 
@@ -248,15 +276,33 @@ class GAT(nn.Module):
         g: dgl.DGLGraph,
         inputs: torch.Tensor,
     ) -> torch.Tensor:
-        x = inputs
+        x = self._input_dropout(inputs)
+        x_last = None
 
-        for i, layer in enumerate(self._layers):
-            x = layer(g, x)
+        for i in range(self._num_layers):
+            if self._edge_encoder is not None:
+                efeat = g.edata['feat']
 
-            if i < self._num_layers - 1:
-                x = x.flatten(start_dim=1)
+                efeat_embedding = self._edge_encoder[i](efeat)
+                efeat_embedding = F.relu(efeat_embedding, inplace=True)
+            else:
+                efeat_embedding = None
 
-        x = x.mean(dim=1)
+            x = self._convs[i](g, x, efeat_embedding).flatten(1, -1)
+
+            if self._residual and x_last is not None:
+                x += x_last[:x.shape[0], :]
+
+            x_last = x
+
+            x = self._norms[i](x)
+
+            if self._activation is not None:
+                x = self._activation(x, inplace=True)
+
+            x = self._dropout(x)
+
+        x = self._fc_prediction(x)
 
         return x
 
