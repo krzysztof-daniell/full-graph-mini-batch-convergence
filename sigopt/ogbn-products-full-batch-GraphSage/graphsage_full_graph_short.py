@@ -16,7 +16,6 @@ class GraphSAGE(nn.Module):
     def __init__(
         self,
         in_feats: int,
-        #hidden_feats: int,
         hidden_feats: list,
         out_feats: int,
         activation: Callable[[None], torch.Tensor],
@@ -25,7 +24,7 @@ class GraphSAGE(nn.Module):
         super().__init__()
         self._hidden_feats = hidden_feats
         self._out_feats = out_feats
-        self._num_layers = len(hidden_feats) #num_layers
+        self._num_layers = len(hidden_feats) 
         self._layers = nn.ModuleList()
         self._dropout = nn.Dropout(dropout)
         self._activation = activation

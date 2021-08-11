@@ -1,10 +1,10 @@
-# mini_batch_experiment.yml
-name: DGL on OGB - local test
-conditionals: 
-  - name: number_of_layers
-    values: ['2', '3']
+# experiment.yml
+name: RGCN in DGL - OGBN Mag
+# conditionals: 
+#   - name: number_of_layers
+#     values: ['2', '3']
 parameters: 
-  - name: base_learning_rate
+  - name: learning_rate
     type: double
     transformation: log
     bounds:
