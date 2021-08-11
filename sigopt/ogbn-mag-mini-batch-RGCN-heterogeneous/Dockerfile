@@ -7,9 +7,11 @@ RUN pip install --no-cache-dir matplotlib
 RUN pip install --no-cache-dir dgl
 RUN pip install --no-cache-dir ogb
 
-COPY ./full_batch_training_run.py /sigopt/full_batch_training_run.py
-COPY ./graphsage_full_graph_short.py /sigopt/graphsage_full_graph_short.py
-COPY ./download_from_s3.py /sigopt/download_from_s3.py
+rgcn_mini_batch_training_run.py utils
+__pycache__                     rgcn_hetero_ns.py
+
+COPY ./rgcn_mini_batch_training_run.py /sigopt/rgcn_mini_batch_training_run.py
+COPY ./rgcn_hetero_ns.py /sigopt/rgcn_hetero_ns.py
 COPY ./utils /sigopt/utils
 
 WORKDIR /sigopt

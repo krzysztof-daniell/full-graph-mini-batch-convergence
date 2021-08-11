@@ -7,13 +7,9 @@ RUN pip install --no-cache-dir matplotlib
 RUN pip install --no-cache-dir dgl
 RUN pip install --no-cache-dir ogb
 
-COPY ./mini_batch_training_run.py /sigopt/mini_batch_training_run.py
-COPY ./graphsage_mini_batch_short.py /sigopt/graphsage_mini_batch_short.py
-COPY ./download_from_s3.py /sigopt/download_from_s3.py
+COPY ./full_batch_training_run.py /sigopt/full_batch_training_run.py
+COPY ./graphsage_full_graph_short.py /sigopt/graphsage_full_graph_short.py
 COPY ./utils /sigopt/utils
-
-ENV OMP_NUM_THREADS 20
-# (48 cores / 2) - 4 dataloading workers 
 
 WORKDIR /sigopt
 
