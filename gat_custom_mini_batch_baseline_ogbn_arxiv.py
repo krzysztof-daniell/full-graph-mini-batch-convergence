@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.gat_custom_ns import GAT, train, validate
-from utils import process_dataset
+from models.utils import process_dataset
 
 if __name__ == '__main__':
     torch.manual_seed(13)
@@ -38,8 +38,8 @@ if __name__ == '__main__':
 
     batch_size = 1024
     num_workers = 4
-    fanouts = [5, 5, 5]
-    lr = 0.001
+    fanouts = [5, 10, 15]
+    lr = 0.002
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
