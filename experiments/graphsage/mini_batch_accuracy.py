@@ -102,14 +102,18 @@ def run(args: argparse.ArgumentParser) -> None:
         'gcn': 1,
         'lstm': 2,
     }
+    activations = {
+        'relu': 0,
+        'leaky_relu': 1,
+    }
 
     sigopt.params.setdefaults({
         'lr': args.lr,
         'hidden_feats': args.hidden_feats,
         'num_layers': args.num_layers,
         'aggregator_type': aggregator_types[args.aggregator_type],
-        'batch_norm': args.batch_norm,
-        'activation': args.activation,
+        'batch_norm': int(args.batch_norm),
+        'activation': activations[args.activation],
         'input_dropout': args.input_dropout,
         'dropout': args.dropout,
         'batch_size': args.batch_size,
@@ -136,6 +140,16 @@ def run(args: argparse.ArgumentParser) -> None:
         num_workers=4,
     )
 
+    # train_dataloader = dgl.dataloading.NodeDataLoader(
+    #     g,
+    #     train_idx,
+    #     sampler,
+    #     batch_size=sigopt.params.batch_size * 256,  # int range(1, 128)
+    #     shuffle=True,
+    #     drop_last=False,
+    #     num_workers=4,
+    # )
+
     in_feats = g.ndata['feat'].shape[-1]
     out_feats = dataset.num_classes
 
@@ -145,8 +159,8 @@ def run(args: argparse.ArgumentParser) -> None:
         '2': 'lstm',
     }
     activations = {
-        'relu': F.relu,
-        'leaky_relu': F.leaky_relu,
+        '0': F.relu,
+        '1': F.leaky_relu,
     }
 
     model = GraphSAGE(
@@ -155,11 +169,23 @@ def run(args: argparse.ArgumentParser) -> None:
         out_feats,
         sigopt.params.num_layers,
         aggregator_types[f'{sigopt.params.aggregator_type}'],
-        sigopt.params.batch_norm,
-        activations[sigopt.params.activation],
+        bool(sigopt.params.batch_norm),
+        activations[f'{sigopt.params.activation}'],
         sigopt.params.input_dropout,
         sigopt.params.dropout,
     ).to(device)
+
+    # model = GraphSAGE(
+    #     in_feats,
+    #     sigopt.params.hidden_feats * 16,  # int range(4, 64)
+    #     out_feats,
+    #     sigopt.params.num_layers,  # int range(2, 5)
+    #     aggregator_types[f'{sigopt.params.aggregator_type}'],
+    #     bool(sigopt.params.batch_norm),
+    #     activations[f'{sigopt.params.activation}'],
+    #     sigopt.params.input_dropout * 0.1,  # int range(0, 9)
+    #     sigopt.params.dropout * 0.1,  # int range(0, 9)
+    # ).to(device)
 
     loss_function = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
