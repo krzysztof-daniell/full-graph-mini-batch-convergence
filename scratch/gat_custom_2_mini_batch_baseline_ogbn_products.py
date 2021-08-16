@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.gat_ns import GAT, train, validate
+from models.gat import GAT, train, validate
 from utils import process_dataset
 
 if __name__ == '__main__':
@@ -22,17 +22,25 @@ if __name__ == '__main__':
     test_idx = torch.nonzero(g.ndata['test_mask'], as_tuple=True)[0]
 
     in_feats = g.ndata['feat'].shape[-1]
-    hidden_feats = 128
+    hidden_feats = 120
     out_feats = dataset.num_classes
     num_heads = 4
     num_layers = 3
+    norm = 'none'
+    batch_norm = True
     activation = F.relu
-    feat_dropout = 0
-    attention_dropout = 0
-    batch_size = 512
+    input_dropout = 0.1
+    attn_dropout = 0
+    edge_dropout = 0.1
+    dropout = 0.5
+    negative_slope = 0.2
+    residual = True
+    use_attn_dst = True
+
+    batch_size = (len(train_idx) + 29) // 30  # 6554
     num_workers = 4
     fanouts = [10, 10, 10]
-    lr = 0.001
+    lr = 0.01
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
@@ -46,15 +54,25 @@ if __name__ == '__main__':
     )
 
     model = GAT(
-        in_feats, 
-        hidden_feats, 
-        out_feats, 
-        [num_heads for _ in range(num_layers)], 
+        in_feats,
+        0,
+        hidden_feats,
+        0,
+        out_feats,
+        num_heads,
         num_layers,
-        activation, 
-        feat_dropout, 
-        attention_dropout,
+        norm=norm,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        attn_dropout=attn_dropout,
+        edge_dropout=edge_dropout,
+        dropout=dropout,
+        negative_slope=negative_slope,
+        residual=residual,
+        activation=activation,
+        use_attn_dst=use_attn_dst,
     )
+
     loss_function = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 

@@ -14,11 +14,11 @@ class GraphSAGE(nn.Module):
         hidden_feats: int,
         out_feats: int,
         num_layers: int,
-        aggregator_type: str,
-        batch_norm: bool,
-        activation: Callable[[torch.Tensor], torch.Tensor],
-        input_dropout: float,
-        dropout: float,
+        aggregator_type: str = 'mean',
+        batch_norm: bool = False,
+        input_dropout: float = 0,
+        dropout: float = 0,
+        activation: Callable[[torch.Tensor], torch.Tensor] = None,
     ):
         super().__init__()
         self._hidden_feats = hidden_feats
@@ -63,7 +63,9 @@ class GraphSAGE(nn.Module):
                     if self._batch_norms is not None:
                         x = self._batch_norms[i](x)
 
-                    x = self._activation(x)
+                    if self._activation is not None:
+                        x = self._activation(x)
+
                     x = self._dropout(x)
         else:
             for i, layer in enumerate(self._layers):
@@ -73,7 +75,9 @@ class GraphSAGE(nn.Module):
                     if self._batch_norms is not None:
                         x = self._batch_norms[i](x)
 
-                    x = self._activation(x)
+                    if self._activation is not None:
+                        x = self._activation(x)
+
                     x = self._dropout(x)
 
         return x

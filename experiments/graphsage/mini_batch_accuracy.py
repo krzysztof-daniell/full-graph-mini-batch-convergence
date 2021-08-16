@@ -168,11 +168,11 @@ def run(args: argparse.ArgumentParser) -> None:
         sigopt.params.hidden_feats,
         out_feats,
         sigopt.params.num_layers,
-        aggregator_types[f'{sigopt.params.aggregator_type}'],
-        bool(sigopt.params.batch_norm),
-        activations[f'{sigopt.params.activation}'],
-        sigopt.params.input_dropout,
-        sigopt.params.dropout,
+        aggregator_type=aggregator_types[f'{sigopt.params.aggregator_type}'],
+        batch_norm=bool(sigopt.params.batch_norm),
+        input_dropout=sigopt.params.input_dropout,
+        dropout=sigopt.params.dropout,
+        activation=activations[f'{sigopt.params.activation}'],
     ).to(device)
 
     # model = GraphSAGE(
