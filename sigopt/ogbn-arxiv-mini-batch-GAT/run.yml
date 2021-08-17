@@ -1,0 +1,11 @@
+# m5.16xlarge
+resources:
+  requests:
+    cpu: 48
+    memory: 220Gi
+  limits:
+    cpu: 54
+    memory: 230Gi
+name: RGCN in DGL on ogbn-mag
+run: python gat_custom_mini_batch_training_run.py -data 0 -e 5
+image: dgl-ogb-arxiv-mini-batch
