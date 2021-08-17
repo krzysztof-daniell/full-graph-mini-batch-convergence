@@ -201,8 +201,10 @@ def do_sigopt_run(args=None):
   ax2.plot(numpy.array(epoch_train_losses), 'b--', label='Train Loss')
   ax2.plot(numpy.array(epoch_test_losses), 'r--', label='Test Loss')
   ax2.set_ylabel('Loss', color='black')
-  ax2.legend(loc='center left')
-  plt.show()
+  h1, l1 = ax.get_legend_handles_labels()
+  h2, l2 = ax2.get_legend_handles_labels()
+  ax.legend(handles=h1+h2, labels=l1+l2, bbox_to_anchor=(0.5, 1.01), loc="lower center", ncol=2)
+  sigopt.log_image(image=fig, name="convergence plot")  
   # sigopt.log_image(image=fig, name="convergence plot")
 
 def get_cli_args():
