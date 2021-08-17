@@ -1,0 +1,8 @@
+# sigopt cluster create -f cluster.yml
+provider: aws
+cluster_name: dgl-ogb
+cpu: 
+  instance_type: t3.large
+  max_nodes: 2
+  min_nodes: 2
+kubernetes_version: '1.18'

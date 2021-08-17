@@ -1,0 +1,45 @@
+# experiment.yml
+name: GAT DGL - OGBN arxiv
+parameters: 
+  - name: learning_rate
+    type: double
+    transformation: log
+    bounds:
+      min: 0.00001
+      max: 0.01
+  - name: hidden_layer_1_neurons
+    type: int
+    bounds:
+      min: 50
+      max: 150
+  - name: hidden_layer_2_neurons
+    type: int
+    bounds:
+      min: 40
+      max: 70
+  - name: hidden_layer_3_neurons
+    type: int
+    bounds:
+      min: 10
+      max: 50
+  - name: batch_size
+    type: int
+    bounds:
+      min: 10
+      max: 200
+  - name: feature_dropout
+    type: double
+    bounds:
+      min: 0.1
+      max: 0.5
+  - name: attention_dropout
+    type: double
+    bounds:
+      min: 0.1
+      max: 0.5
+metrics:
+  - name: best epoch - test accuracy
+    strategy: optimize
+    objective: maximize
+budget: 20
+parallel_bandwidth: 4

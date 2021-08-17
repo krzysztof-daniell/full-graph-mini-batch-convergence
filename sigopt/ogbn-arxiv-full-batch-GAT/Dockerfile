@@ -12,8 +12,8 @@ RUN ./aws/install
 
 VOLUME /root/.aws /root/.aws
 
-COPY ./full_batch_training_run.py /sigopt/full_batch_training_run.py
-COPY ./graphsage_full_graph_short.py /sigopt/graphsage_full_graph_short.py
+COPY ./gat_full_batch_training_run.py /sigopt/gat_full_batch_training_run.py
+COPY ./gat.py /sigopt/gat.py
 COPY ./utils /sigopt/utils
 
 WORKDIR /sigopt

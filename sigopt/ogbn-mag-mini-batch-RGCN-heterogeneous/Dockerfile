@@ -6,9 +6,11 @@ RUN pip install --no-cache-dir torch
 RUN pip install --no-cache-dir matplotlib
 RUN pip install --no-cache-dir dgl
 RUN pip install --no-cache-dir ogb
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN ./aws/install
 
-rgcn_mini_batch_training_run.py utils
-__pycache__                     rgcn_hetero_ns.py
+VOLUME /root/.aws /root/.aws
 
 COPY ./rgcn_mini_batch_training_run.py /sigopt/rgcn_mini_batch_training_run.py
 COPY ./rgcn_hetero_ns.py /sigopt/rgcn_hetero_ns.py
