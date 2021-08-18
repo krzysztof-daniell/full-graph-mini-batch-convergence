@@ -280,7 +280,7 @@ class EntityClassify(nn.Module):
         return x
 
 
-def train(
+def train_mini_batch(
     embedding_layer: nn.Module,
     model: nn.Module,
     device: Union[str, torch.device],
@@ -329,6 +329,42 @@ def train(
     total_accuracy /= step + 1
 
     return time, total_loss, total_accuracy
+
+
+def train_full_graph(
+    embedding_layer: nn.Module,
+    model: nn.Module,
+    embedding_optimizer: torch.optim.Optimizer,
+    model_optimizer: torch.optim.Optimizer,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    hg: dgl.DGLHeteroGraph,
+    labels: torch.Tensor,
+    predict_category: str,
+    mask: torch.Tensor,
+) -> tuple[float]:
+    model.train()
+
+    start = default_timer()
+
+    embedding_optimizer.zero_grad()
+    model_optimizer.zero_grad()
+
+    embedding = embedding_layer()
+    logits = model(hg, embedding)[predict_category]
+    loss = loss_function(logits[mask], labels[mask])
+
+    loss.backward()
+    model_optimizer.step()
+    embedding_optimizer.step()
+
+    _, indices = torch.max(logits[mask], dim=1)
+    correct = torch.sum(indices == labels[mask])
+    accuracy = correct.item() / len(labels[mask])
+
+    stop = default_timer()
+    time = stop - start
+
+    return time, loss, accuracy
 
 
 def validate(

@@ -47,7 +47,7 @@ class GATConv(nn.Module):
             self.bias = None
         else:
             self._fc_dst = None
-            self.bias = nn.Parameter(torch.Tensor(out_feats))
+            self.bias = nn.Parameter(out_feats * num_heads)
 
         self._attn_fc_src = nn.Linear(
             self._in_src_feats, num_heads, bias=False)
@@ -104,10 +104,8 @@ class GATConv(nn.Module):
 
         feat_fc_src = self._fc_src(node_inputs).view(
             -1, self._num_heads, self._out_feats)
-
-        if self._fc_dst is not None:
-            feat_fc_dst = self._fc_dst(node_inputs_dst).view(
-                -1, self._num_heads, self._out_feats)
+        feat_fc_dst = self._fc_dst(node_inputs_dst).view(
+            -1, self._num_heads, self._out_feats)
 
         if self._norm in ['both', 'left']:
             degrees = g.out_degrees().float().clamp(min=1)
@@ -191,7 +189,8 @@ class GAT(nn.Module):
         self,
         node_in_feats: int,
         edge_in_feats: int,
-        hidden_feats: int,
+        node_hidden_feats: int,
+        edge_hidden_feats: int,
         out_feats: int,
         num_heads: int,
         num_layers: int,
@@ -208,7 +207,6 @@ class GAT(nn.Module):
         allow_zero_in_degree: bool = True,
     ):
         super().__init__()
-        self._edge_in_feats = edge_in_feats
         self._num_heads = num_heads
         self._num_layers = num_layers
         self._input_dropout = nn.Dropout(input_dropout)
@@ -216,27 +214,32 @@ class GAT(nn.Module):
         self._residual = residual
         self._activation = activation
 
-        self._layers = nn.ModuleList()
+        self._node_encoder = nn.Linear(node_in_feats, node_hidden_feats)
 
-        self._layers.append(GATConv(
-            node_in_feats,
-            edge_in_feats,
-            hidden_feats,
-            num_heads,
-            norm=norm,
-            attn_dropout=attn_dropout,
-            edge_dropout=edge_dropout,
-            negative_slope=negative_slope,
-            residual=residual,
-            use_attn_dst=use_attn_dst,
-            allow_zero_in_degree=allow_zero_in_degree,
-        ))
+        if edge_hidden_feats > 0:
+            self._edge_encoder = nn.ModuleList()
+        else:
+            self._edge_encoder = None
 
-        for _ in range(1, num_layers - 1):
-            self._layers.append(GATConv(
-                num_heads * hidden_feats,
-                edge_in_feats,
-                hidden_feats,
+        self._convs = nn.ModuleList()
+
+        if batch_norm:
+            self._batch_norms = nn.ModuleList()
+        else:
+            self._batch_norms = None
+
+        for i in range(num_layers):
+            in_hidden = num_heads * node_hidden_feats if i > 0 else node_hidden_feats
+            out_hidden = node_hidden_feats
+
+            if self._edge_encoder is not None:
+                self._edge_encoder.append(
+                    nn.Linear(edge_in_feats, edge_hidden_feats))
+
+            self._convs.append(GATConv(
+                in_hidden,
+                edge_hidden_feats,
+                out_hidden,
                 num_heads,
                 norm=norm,
                 attn_dropout=attn_dropout,
@@ -247,72 +250,75 @@ class GAT(nn.Module):
                 allow_zero_in_degree=allow_zero_in_degree,
             ))
 
-        self._layers.append(GATConv(
-            num_heads * hidden_feats,
-            edge_in_feats,
-            out_feats,
-            num_heads,
-            norm=norm,
-            attn_dropout=attn_dropout,
-            edge_dropout=edge_dropout,
-            negative_slope=negative_slope,
-            residual=residual,
-            use_attn_dst=use_attn_dst,
-            allow_zero_in_degree=allow_zero_in_degree,
-        ))
-
-        if batch_norm:
-            self._batch_norms = nn.ModuleList()
-
-            for _ in range(num_layers - 1):
+            if batch_norm:
                 self._batch_norms.append(
-                    nn.BatchNorm1d(num_heads * hidden_feats))
-        else:
-            self._batch_norms = None
+                    nn.BatchNorm1d(num_heads * out_hidden))
 
-    def _apply(self, layer_idx: int, inputs: torch.Tensor) -> torch.Tensor:
-        x = inputs
-
-        if self._batch_norms is not None:
-            x = self._batch_norms[layer_idx](x)
-
-        if self._activation is not None:
-            x = self._activation(x, inplace=True)
-
-        x = self._dropout(x)
-
-        return x
+        self._fc_prediction = nn.Linear(
+            num_heads * node_hidden_feats, out_feats)
 
     def forward(
         self,
         g: Union[dgl.DGLGraph, tuple[dgl.DGLGraph]],
     ) -> torch.Tensor:
         if isinstance(g, list):
-            x = self._input_dropout(g[0].srcdata['feat'])
+            x = self._node_encoder(g[0].srcdata['feat'])
 
-            for i, (block, layer) in enumerate(zip(g, self._layers)):
-                if self._edge_in_feats > 0:
-                    efeat = block.edata['feat']
+            if self._activation is not None:
+                x = self._activation(x)
+            else:
+                x = F.relu(x, inplace=True)
+
+            x = self._input_dropout(x)
+
+            for i in range(self._num_layers):
+                if self._edge_encoder is not None:
+                    efeat = g[i].edata['feat']
+
+                    efeat_embedding = self._edge_encoder[i](efeat)
+
+                    if self._activation is not None:
+                        efeat_embedding = self._activation(efeat_embedding)
+                    else:
+                        efeat_embedding = F.relu(efeat_embedding, inplace=True)
                 else:
-                    efeat = None
+                    efeat_embedding = None
 
-                x = layer(block, x, efeat).flatten(1, -1)
+                x = self._convs[i](g[i], x, efeat_embedding).flatten(1, -1)
 
-                if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                if self._batch_norms is not None:
+                    x = self._batch_norms[i](x)
+
+                if self._activation is not None:
+                    x = self._activation(x, inplace=True)
+
+                x = self._dropout(x)
         else:
-            x = self._input_dropout(g.srcdata['feat'])
+            x = self._node_encoder(g.srcdata['feat'])
+            x = F.relu(x, inplace=True)
 
-            for i, layer in enumerate(self._layers):
-                if self._edge_in_feats > 0:
+            x = self._input_dropout(x)
+
+            for i in range(self._num_layers):
+                if self._edge_encoder is not None:
                     efeat = g.edata['feat']
+
+                    efeat_embedding = self._edge_encoder[i](efeat)
+                    efeat_embedding = F.relu(efeat_embedding, inplace=True)
                 else:
-                    efeat = None
+                    efeat_embedding = None
 
-                x = layer(g, x, efeat).flatten(1, -1)
+                x = self._convs[i](g, x, efeat_embedding).flatten(1, -1)
 
-                if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                if self._batch_norms is not None:
+                    x = self._batch_norms[i](x)
+
+                if self._activation is not None:
+                    x = self._activation(x, inplace=True)
+
+                x = self._dropout(x)
+
+        x = self._fc_prediction(x)
 
         return x
 
@@ -366,6 +372,7 @@ def train_full_graph(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
+    features = g.ndata['feat']
     labels = g.ndata['label']
 
     model.train()
@@ -373,7 +380,7 @@ def train_full_graph(
 
     start = default_timer()
 
-    logits = model(g)
+    logits = model(g, features)
     loss = loss_function(logits[mask], labels[mask])
 
     loss.backward()

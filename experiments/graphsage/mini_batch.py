@@ -225,25 +225,28 @@ def run(args: argparse.ArgumentParser) -> None:
 
             break
 
-    model.load_state_dict(checkpoint.best_epoch_model_parameters)
+    if args.test_validation:
+        model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
-    test_time, test_loss, test_accuracy = validate(
-        model, loss_function, g, test_idx)
+        test_time, test_loss, test_accuracy = validate(
+            model, loss_function, g, test_idx)
 
-    print(
-        f'Test Loss: {test_loss:.2f} '
-        f'Test Accuracy: {test_accuracy * 100:.2f} % '
-        f'Test Epoch Time: {test_time:.2f}'
-    )
+        print(
+            f'Test Loss: {test_loss:.2f} '
+            f'Test Accuracy: {test_accuracy * 100:.2f} % '
+            f'Test Epoch Time: {test_time:.2f}'
+        )
 
-    log_metrics_to_sigopt(
-        checkpoint,
-        'GraphSAGE NS',
-        args.dataset,
-        test_loss,
-        test_accuracy,
-        test_time,
-    )
+        log_metrics_to_sigopt(
+            checkpoint,
+            'GraphSAGE NS',
+            args.dataset,
+            test_loss,
+            test_accuracy,
+            test_time,
+        )
+    else:
+        log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
 
 
 if __name__ == '__main__':
@@ -266,10 +269,12 @@ if __name__ == '__main__':
     argparser.add_argument('--dropout', default=0.5, type=float)
     argparser.add_argument('--batch-size', default=1000, type=int)
     argparser.add_argument('--fanouts', default='5,10,15', type=str)
-    argparser.add_argument('--seed', default=13, type=int)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)
+    argparser.add_argument('--test-validation', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--seed', default=13, type=int)
 
     args = argparser.parse_args()
 

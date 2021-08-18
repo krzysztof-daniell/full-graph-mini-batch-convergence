@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.gat import GAT, train, validate
+from models.gat import GAT, train_mini_batch, validate
 from utils import process_dataset
 
 if __name__ == '__main__':
@@ -22,25 +22,26 @@ if __name__ == '__main__':
     test_idx = torch.nonzero(g.ndata['test_mask'], as_tuple=True)[0]
 
     in_feats = g.ndata['feat'].shape[-1]
-    hidden_feats = 120
+    hidden_feats = 128  # 120
     out_feats = dataset.num_classes
     num_heads = 4
     num_layers = 3
     norm = 'none'
-    batch_norm = True
+    batch_norm = False  # True
     activation = F.relu
-    input_dropout = 0.1
+    input_dropout = 0  # 0.1
     attn_dropout = 0
-    edge_dropout = 0.1
-    dropout = 0.5
+    edge_dropout = 0  # 0.1
+    dropout = 0  # 0.5
     negative_slope = 0.2
-    residual = True
-    use_attn_dst = True
+    residual = False  # True
+    use_attn_dst = False  # True
 
-    batch_size = (len(train_idx) + 29) // 30  # 6554
+    # batch_size = (len(train_idx) + 29) // 30  # 6554
+    batch_size = 512  # 6554
     num_workers = 4
     fanouts = [10, 10, 10]
-    lr = 0.01
+    lr = 0.001
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
@@ -57,7 +58,6 @@ if __name__ == '__main__':
         in_feats,
         0,
         hidden_feats,
-        0,
         out_feats,
         num_heads,
         num_layers,
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     training_time = 0
 
     for epoch in range(1, 1 + num_epochs):
-        train_time, train_loss, train_accuracy = train(
+        train_time, train_loss, train_accuracy = train_mini_batch(
             model, device, optimizer, loss_function, train_dataloader)
         # valid_time, valid_loss, valid_accuracy = validate(
         #     model, loss_function, g, valid_idx)

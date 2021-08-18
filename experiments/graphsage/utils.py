@@ -157,9 +157,9 @@ def log_metrics_to_sigopt(
     checkpoint: Callback,
     model_name: str,
     dataset: str,
-    test_loss: float,
-    test_accuracy: float,
-    test_time: float,
+    test_loss: float = None,
+    test_accuracy: float = None,
+    test_time: float = None,
 ) -> None:
     sigopt.log_model(model_name)
     sigopt.log_dataset(dataset)
@@ -172,13 +172,19 @@ def log_metrics_to_sigopt(
                       checkpoint.best_epoch_valid_loss)
     sigopt.log_metric('best epoch - valid accuracy',
                       checkpoint.best_epoch_valid_accuracy)
-    sigopt.log_metric('best epoch - test loss', test_loss)
-    sigopt.log_metric('best epoch - test accuracy', test_accuracy)
     sigopt.log_metric('best epoch - training time',
                       checkpoint.best_epoch_training_time)
     sigopt.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
     sigopt.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
-    sigopt.log_metric('test epoch time', test_time)
+
+    if test_loss is not None:
+        sigopt.log_metric('best epoch - test loss', test_loss)
+
+    if test_accuracy is not None:
+        sigopt.log_metric('best epoch - test accuracy', test_accuracy)
+
+    if test_time is not None:
+        sigopt.log_metric('test epoch time', test_time)
 
     metrics_plot = get_metrics_plot(
         checkpoint.train_accuracies,
