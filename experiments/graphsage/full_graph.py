@@ -74,12 +74,12 @@ def validate(
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset = process_dataset(args.dataset, '/home/ksadowski/datasets')
-    g = dataset[0]
-
-    train_idx = torch.nonzero(g.ndata['train_mask'], as_tuple=True)[0]
-    valid_idx = torch.nonzero(g.ndata['valid_mask'], as_tuple=True)[0]
-    test_idx = torch.nonzero(g.ndata['test_mask'], as_tuple=True)[0]
+    dataset, g, train_idx, valid_idx, test_idx = process_dataset(
+        args.dataset,
+        root='/home/ksadowski/datasets',
+        reverse_edges=args.graph_reverse_edges,
+        self_loop=args.graph_self_loop,
+    )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -193,7 +193,7 @@ def run(args: argparse.ArgumentParser) -> None:
 
         log_metrics_to_sigopt(
             checkpoint,
-            'GraphSAGE NS',
+            'GraphSAGE',
             args.dataset,
             test_loss,
             test_accuracy,
@@ -208,6 +208,10 @@ if __name__ == '__main__':
 
     argparser.add_argument('--dataset', default='ogbn-products', type=str)
     argparser.add_argument('--download-dataset', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--graph-reverse-edges', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--graph-self-loop', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--lr', default=0.01, type=float)

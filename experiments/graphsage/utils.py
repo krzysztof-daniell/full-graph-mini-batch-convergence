@@ -316,17 +316,42 @@ def load_ogbn_mag(root: str = None) -> OGBDataset:
     return ogb_dataset
 
 
-def process_dataset(name: str, root: str = None) -> OGBDataset:
+def process_dataset(
+    name: str,
+    root: str = None,
+    reverse_edges: bool = False,
+    self_loop: bool = False,
+) -> tuple[Union[dgl.DGLGraph, dgl.DGLHeteroGraph], torch.Tensor]:
     if root is None:
         root = 'datasets'
 
     ogbn_homogeneous = ['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins']
 
-    if name == 'reddit':
-        dataset = dgl.data.RedditDataset(self_loop=True, raw_dir=root)
-    elif name in ogbn_homogeneous:
+    if name in ogbn_homogeneous:
         dataset = load_ogbn_homogeneous(name, root=root)
     elif name == 'ogbn-mag':
         dataset = load_ogbn_mag(root=root)
 
-    return dataset
+    g = dataset[0]
+
+    if reverse_edges:
+        g.add_edge(*g.all_edges())
+
+    if self_loop:
+        g = g.remove_self_loop().add_self_loop()
+
+    if name in ogbn_homogeneous:
+        train_idx = torch.nonzero(g.ndata['train_mask'], as_tuple=True)[0]
+        valid_idx = torch.nonzero(g.ndata['valid_mask'], as_tuple=True)[0]
+        test_idx = torch.nonzero(g.ndata['test_mask'], as_tuple=True)[0]
+    elif name == 'ogbn-mag':
+        predict_category = dataset.predict_category
+
+        train_idx = torch.nonzero(
+            g.nodes[predict_category].data['train_mask'], as_tuple=True)[0]
+        valid_idx = torch.nonzero(
+            g.nodes[predict_category].data['valid_mask'], as_tuple=True)[0]
+        test_idx = torch.nonzero(
+            g.nodes[predict_category].data['test_mask'], as_tuple=True)[0]
+
+    return dataset, g, train_idx, valid_idx, test_idx
