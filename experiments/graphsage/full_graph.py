@@ -33,6 +33,8 @@ def train(
 
     loss.backward()
     optimizer.step()
+    
+    loss = loss.item()
 
     _, indices = torch.max(logits[mask], dim=1)
     correct = torch.sum(indices == labels[mask])
@@ -206,7 +208,8 @@ def run(args: argparse.ArgumentParser) -> None:
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE Optimization')
 
-    argparser.add_argument('--dataset', default='ogbn-products', type=str)
+    argparser.add_argument('--dataset', default='ogbn-products', type=str,
+                           choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-reverse-edges', default=False,
@@ -218,13 +221,13 @@ if __name__ == '__main__':
     argparser.add_argument('--hidden-feats', default=256, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--aggregator-type', default='mean',
-                           type=str, choices=['mean', 'gcn', 'lstm'])
+                           type=str, choices=['gcn', 'mean', 'lstm', 'pool'])
     argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--activation', default='relu',
-                           type=str, choices=['relu', 'leaky_relu'])
     argparser.add_argument('--input-dropout', default=0.1, type=float)
     argparser.add_argument('--dropout', default=0.5, type=float)
+    argparser.add_argument('--activation', default='relu',
+                           type=str, choices=['leaky_relu', 'relu'])
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)

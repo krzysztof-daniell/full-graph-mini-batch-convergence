@@ -257,6 +257,23 @@ class GAT(nn.Module):
         self._fc_prediction = nn.Linear(
             num_heads * node_hidden_feats, out_feats)
 
+    def _apply_layers(
+        self,
+        layer_idx: int,
+        inputs: torch.Tensor,
+    ) -> torch.Tensor:
+        x = inputs
+
+        if self._batch_norms is not None:
+            x = self._batch_norms[layer_idx](x)
+
+        if self._activation is not None:
+            x = self._activation(x, inplace=True)
+
+        x = self._dropout(x)
+
+        return x
+
     def forward(
         self,
         g: Union[dgl.DGLGraph, tuple[dgl.DGLGraph]],
@@ -285,14 +302,7 @@ class GAT(nn.Module):
                     efeat_embedding = None
 
                 x = self._convs[i](g[i], x, efeat_embedding).flatten(1, -1)
-
-                if self._batch_norms is not None:
-                    x = self._batch_norms[i](x)
-
-                if self._activation is not None:
-                    x = self._activation(x, inplace=True)
-
-                x = self._dropout(x)
+                x = self._apply_layers(i, x)
         else:
             x = self._node_encoder(g.srcdata['feat'])
             x = F.relu(x, inplace=True)
@@ -309,14 +319,7 @@ class GAT(nn.Module):
                     efeat_embedding = None
 
                 x = self._convs[i](g, x, efeat_embedding).flatten(1, -1)
-
-                if self._batch_norms is not None:
-                    x = self._batch_norms[i](x)
-
-                if self._activation is not None:
-                    x = self._activation(x, inplace=True)
-
-                x = self._dropout(x)
+                x = self._apply_layers(i, x)
 
         x = self._fc_prediction(x)
 
@@ -385,6 +388,8 @@ def train_full_graph(
 
     loss.backward()
     optimizer.step()
+
+    loss = loss.item()
 
     _, indices = torch.max(logits[mask], dim=1)
     correct = torch.sum(indices == labels[mask])

@@ -9,17 +9,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from experiments.model import GraphSAGE
+from model import EntityClassify, RelGraphEmbedding
 from utils import (Callback, download_dataset, log_metrics_to_sigopt,
                    process_dataset)
 
 
 def train(
+    embedding_layer: nn.Module,
     model: nn.Module,
     device: Union[str, torch.device],
-    optimizer: torch.optim.Optimizer,
+    embedding_optimizer: torch.optim.Optimizer,
+    model_optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     dataloader: dgl.dataloading.NodeDataLoader,
+    labels: torch.Tensor,
+    predict_category: str,
 ) -> tuple[float]:
     model.train()
 
@@ -28,23 +32,26 @@ def train(
 
     start = default_timer()
 
-    for step, (_, _, blocks) in enumerate(dataloader):
-        optimizer.zero_grad()
+    for step, (in_nodes, out_nodes, blocks) in enumerate(dataloader):
+        embedding_optimizer.zero_grad()
+        model_optimizer.zero_grad()
 
+        out_nodes = out_nodes[predict_category]
         blocks = [block.int().to(device) for block in blocks]
 
-        inputs = blocks[0].srcdata['feat']
-        labels = blocks[-1].dstdata['label']
+        batch_labels = labels[out_nodes]
 
-        logits = model(blocks, inputs)
-        loss = loss_function(logits, labels)
+        embedding = embedding_layer(in_nodes)
+        logits = model(blocks, embedding)[predict_category]
+        loss = loss_function(logits, batch_labels)
 
         loss.backward()
-        optimizer.step()
+        model_optimizer.step()
+        embedding_optimizer.step()
 
         _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == labels)
-        accuracy = correct.item() / len(labels)
+        correct = torch.sum(indices == batch_labels)
+        accuracy = correct.item() / len(batch_labels)
 
         total_loss += loss.item()
         total_accuracy += accuracy
@@ -59,20 +66,21 @@ def train(
 
 
 def validate(
+    embedding_layer: nn.Module,
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    g: dgl.DGLGraph,
+    hg: dgl.DGLHeteroGraph,
+    labels: torch.Tensor,
+    predict_category: str,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    features = g.ndata['feat']
-    labels = g.ndata['label']
-
     model.eval()
 
     start = default_timer()
 
     with torch.no_grad():
-        logits = model(g, features)
+        embedding = embedding_layer()
+        logits = model(hg, embedding)[predict_category]
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)
@@ -88,19 +96,19 @@ def validate(
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, g, train_idx, valid_idx, test_idx = process_dataset(
+    dataset, hg, train_idx, valid_idx, test_idx = process_dataset(
         args.dataset,
         root='/home/ksadowski/datasets',
-        reverse_edges=args.graph_reverse_edges,
-        self_loop=args.graph_self_loop,
     )
+    predict_category = dataset.predict_category
+    labels = hg.nodes[predict_category].data['labels']
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    aggregator_types = {
-        'mean': 0,
-        'gcn': 1,
-        'lstm': 2,
+    norms = {
+        'none': 0,
+        'right': 1,
+        'both': 2,
     }
     activations = {
         'relu': 0,
@@ -108,14 +116,17 @@ def run(args: argparse.ArgumentParser) -> None:
     }
 
     sigopt.params.setdefaults({
-        'lr': args.lr,
+        'embedding_lr': args.embedding_lr,
+        'model_lr': args.model_lr,
         'hidden_feats': args.hidden_feats,
+        'num_bases': args.num_bases,
         'num_layers': args.num_layers,
-        'aggregator_type': aggregator_types[args.aggregator_type],
+        'norm': norms[args.norm],
         'batch_norm': int(args.batch_norm),
         'activation': activations[args.activation],
         'input_dropout': args.input_dropout,
         'dropout': args.dropout,
+        'self_loop': args.self_loop,
         'batch_size': args.batch_size,
     })
 
@@ -131,8 +142,8 @@ def run(args: argparse.ArgumentParser) -> None:
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
-        g,
-        train_idx,
+        hg,
+        {predict_category: train_idx},
         sampler,
         batch_size=sigopt.params.batch_size,
         shuffle=True,
@@ -150,54 +161,77 @@ def run(args: argparse.ArgumentParser) -> None:
     #     num_workers=4,
     # )
 
-    in_feats = g.ndata['feat'].shape[-1]
+    in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
 
-    aggregator_types = {
-        '0': 'mean',
-        '1': 'gcn',
-        '2': 'lstm',
+    num_nodes = {}
+    node_feats = {}
+
+    for ntype in hg.ntypes:
+        num_nodes[ntype] = hg.num_nodes(ntype)
+        node_feats[ntype] = hg.nodes[ntype].data.get('feat')
+
+    norms = {
+        '0': 'none',
+        '1': 'right',
+        '2': 'both',
     }
     activations = {
         '0': F.relu,
         '1': F.leaky_relu,
     }
 
-    model = GraphSAGE(
+    embedding_layer = RelGraphEmbedding(
+        hg,
+        in_feats,
+        num_nodes,
+        node_feats,
+    )
+    model = EntityClassify(
+        hg,
         in_feats,
         sigopt.params.hidden_feats,
         out_feats,
+        sigopt.params.num_bases,
         sigopt.params.num_layers,
-        aggregator_type=aggregator_types[f'{sigopt.params.aggregator_type}'],
+        norm=norms[f'{sigopt.params.norm}'],
         batch_norm=bool(sigopt.params.batch_norm),
         input_dropout=sigopt.params.input_dropout,
         dropout=sigopt.params.dropout,
         activation=activations[f'{sigopt.params.activation}'],
-    ).to(device)
-
-    # model = GraphSAGE(
-    #     in_feats,
-    #     sigopt.params.hidden_feats * 16,  # int range(4, 64)
-    #     out_feats,
-    #     sigopt.params.num_layers,  # int range(2, 5)
-    #     aggregator_types[f'{sigopt.params.aggregator_type}'],
-    #     bool(sigopt.params.batch_norm),
-    #     activations[f'{sigopt.params.activation}'],
-    #     sigopt.params.input_dropout * 0.05,  # int range(0, 19)
-    #     sigopt.params.dropout * 0.05,  # int range(0, 19)
-    # ).to(device)
+        self_loop=sigopt.params.self_loop,
+    )
 
     loss_function = nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
+    embedding_optimizer = torch.optim.SparseAdam(list(
+        embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
+    model_optimizer = torch.optim.Adam(
+        model.parameters(), lr=sigopt.params.model_lr)
 
     checkpoint = Callback(args.early_stopping_patience,
                           args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
-            model, device, optimizer, loss_function, train_dataloader)
+            embedding_layer,
+            model,
+            device,
+            embedding_optimizer,
+            model_optimizer,
+            loss_function,
+            train_dataloader,
+            labels,
+            predict_category,
+        )
         valid_time, valid_loss, valid_accuracy = validate(
-            model, loss_function, g, valid_idx)
+            embedding_layer,
+            model,
+            loss_function,
+            hg,
+            labels,
+            predict_category,
+            valid_idx,
+        )
 
         checkpoint.create(
             epoch,
@@ -229,7 +263,14 @@ def run(args: argparse.ArgumentParser) -> None:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
         test_time, test_loss, test_accuracy = validate(
-            model, loss_function, g, test_idx)
+            embedding_layer,
+            model,
+            loss_function,
+            hg,
+            labels,
+            predict_category,
+            test_idx,
+        )
 
         print(
             f'Test Loss: {test_loss:.2f} '
@@ -239,41 +280,41 @@ def run(args: argparse.ArgumentParser) -> None:
 
         log_metrics_to_sigopt(
             checkpoint,
-            'GraphSAGE NS',
+            'RGCN NS',
             args.dataset,
             test_loss,
             test_accuracy,
             test_time,
         )
     else:
-        log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
+        log_metrics_to_sigopt(checkpoint, 'RGCN NS', args.dataset)
 
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
 
-    argparser.add_argument('--dataset', default='ogbn-arxiv', type=str,
-                           choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
+    argparser.add_argument('--dataset', default='ogbn-mag', type=str,
+                           choices=['ogbn-mag'])
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--graph-reverse-edges', default=False,
-                           action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--graph-self-loop', default=False,
-                           action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
-    argparser.add_argument('--lr', default=0.003, type=float)
-    argparser.add_argument('--hidden-feats', default=256, type=int)
-    argparser.add_argument('--num-layers', default=3, type=int)
-    argparser.add_argument('--aggregator-type', default='mean',
-                           type=str, choices=['gcn', 'mean', 'lstm', 'pool'])
+    argparser.add_argument('--embedding-lr', default=0.01, type=float)
+    argparser.add_argument('--model-lr', default=0.01, type=float)
+    argparser.add_argument('--hidden-feats', default=64, type=int)
+    argparser.add_argument('--num-bases', default=2, type=int)
+    argparser.add_argument('--num-layers', default=2, type=int)
+    argparser.add_argument('--norm', default='right',
+                           type=str, choices=['both', 'none', 'right'])
     argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--input-dropout', default=0.1, type=float)
     argparser.add_argument('--dropout', default=0.5, type=float)
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['leaky_relu', 'relu'])
-    argparser.add_argument('--batch-size', default=1000, type=int)
-    argparser.add_argument('--fanouts', default='5,10,15', type=str)
+    argparser.add_argument('--self-loop', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--batch-size', default=1024, type=int)
+    argparser.add_argument('--fanouts', default='25,20', type=str)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)

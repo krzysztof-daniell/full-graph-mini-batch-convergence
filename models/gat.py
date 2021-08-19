@@ -379,6 +379,8 @@ def train_full_graph(
     loss.backward()
     optimizer.step()
 
+    loss = loss.item()
+
     _, indices = torch.max(logits[mask], dim=1)
     correct = torch.sum(indices == labels[mask])
     accuracy = correct.item() / len(labels[mask])

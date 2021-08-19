@@ -38,7 +38,7 @@ if __name__ == '__main__':
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     hidden_feats = 64  # 64
     out_feats = dataset.num_classes
-    num_bases = 2  # 2
+    num_bases = 2  # 2, max 8
     num_layers = 2  # 2
     norm = 'right'  # right
     batch_norm = False  # False
