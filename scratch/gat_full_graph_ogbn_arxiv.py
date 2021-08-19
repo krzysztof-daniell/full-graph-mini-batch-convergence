@@ -11,7 +11,8 @@ if __name__ == '__main__':
     dataset = process_dataset('ogbn-arxiv', '/home/ksadowski/datasets')
     g = dataset[0]
 
-    g.add_edges(*g.all_edges())
+    src, dst = g.all_edges()
+    g.add_edges(dst, src)
     g = g.remove_self_loop().add_self_loop()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -25,7 +26,7 @@ if __name__ == '__main__':
     in_feats = g.ndata['feat'].shape[-1]
     hidden_feats = 250
     out_feats = dataset.num_classes
-    num_heads = 3
+    num_heads = 4
     num_layers = 3
     norm = 'both'
     batch_norm = True
@@ -36,7 +37,7 @@ if __name__ == '__main__':
     dropout = 0.75
     negative_slope = 0.2
     residual = True
-    use_attn_dst = False
+    use_attn_dst = True
     allow_zero_in_degree = True
 
     lr = 0.002
@@ -68,8 +69,8 @@ if __name__ == '__main__':
     for epoch in range(1, 1 + num_epochs):
         train_time, train_loss, train_accuracy = train_full_graph(
             model, optimizer, loss_function, g, train_idx)
-        # valid_time, valid_loss, valid_accuracy = validate(
-        #     model, loss_function, g, valid_idx)
+        valid_time, valid_loss, valid_accuracy = validate(
+            model, loss_function, g, valid_idx)
         test_time, test_loss, test_accuracy = validate(
             model, loss_function, g, test_idx)
 
@@ -78,10 +79,10 @@ if __name__ == '__main__':
         print(
             f'Epoch: {epoch:03} '
             f'Train Loss: {train_loss:.2f} '
-            # f'valid Loss: {valid_loss:.2f} '
+            f'Valid Loss: {valid_loss:.2f} '
             f'Test Loss: {test_loss:.2f} '
             f'Train Accuracy: {train_accuracy * 100:.2f} % '
-            # f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
+            f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
             f'Test Accuracy: {test_accuracy * 100:.2f} % '
             f'Epoch time: {train_time:.2f} '
             f'Training time: {training_time:.2f} '

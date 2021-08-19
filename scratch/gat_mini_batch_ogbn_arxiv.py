@@ -12,7 +12,8 @@ if __name__ == '__main__':
     dataset = process_dataset('ogbn-arxiv', '/home/ksadowski/datasets')
     g = dataset[0]
 
-    g.add_edges(*g.all_edges())
+    src, dst = g.all_edges()
+    g.add_edges(dst, src)
     g = g.remove_self_loop().add_self_loop()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
