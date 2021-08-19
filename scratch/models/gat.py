@@ -223,27 +223,27 @@ class GATConv(nn.Module):
                                  num_heads * out_feats, bias=False)
 
         self._attn_fc_src = nn.Parameter(
-            torch.FloatTensor(size=(1, num_heads, out_feats)))
+            torch.FloatTensor(size=(1, num_heads, out_feats)))  # TODO: try linear attention
 
         if use_attn_dst:
             self._attn_fc_dst = nn.Parameter(
-                torch.FloatTensor(size=(1, num_heads, out_feats)))
+                torch.FloatTensor(size=(1, num_heads, out_feats)))  # TODO: try linear attention
         else:
             self._attn_fc_dst = None
 
         if edge_in_feats > 0:
             self._attn_fc_edge = nn.Linear(
-                edge_in_feats, num_heads, bias=False)
+                edge_in_feats, num_heads, bias=False)  # TODO: if node attentions are parameters unify it
         else:
             self._attn_fc_edge = None
 
         if residual:
             self._fc_res = nn.Linear(
-                self._in_dst_feats, num_heads * out_feats, bias=False)
+                self._in_dst_feats, num_heads * out_feats, bias=False)  # TODO: setup to None if not used
 
         if bias:
             self._bias = nn.Parameter(
-                torch.FloatTensor(size=(num_heads * out_feats,)))
+                torch.FloatTensor(size=(num_heads * out_feats,)))  # TODO: setup to None if not used
 
         self.reset_parameters()
 
@@ -264,10 +264,10 @@ class GATConv(nn.Module):
         if self._attn_fc_edge is not None:
             nn.init.xavier_normal_(self._attn_fc_edge.weight, gain=gain)
 
-        if hasattr(self, '_fc_res'):
+        if hasattr(self, '_fc_res'):  # TODO: check if not none
             nn.init.xavier_normal_(self._fc_res.weight, gain=gain)
 
-        if hasattr(self, '_bias'):
+        if hasattr(self, '_bias'):  # TODO: check if not none
             nn.init.zeros_(self.bias)
 
     def set_allow_zero_in_degree(self, value: bool):
@@ -376,11 +376,11 @@ class GATConv(nn.Module):
 
             x *= norm
 
-        if hasattr(self, '_fc_res'):
+        if hasattr(self, '_fc_res'):  # TODO: check if not none
             x += self._fc_res(
                 node_inputs_dst).view(node_inputs_dst.shape[0], -1, self._out_feats)
 
-        if hasattr(self, '_bias'):
+        if hasattr(self, '_bias'):  # TODO: check if not none, check if broadcasting works
             x += self._bias.view(node_inputs_dst.shape[0], -1, self._out_feats)
 
         if self._activation is not None:
@@ -473,7 +473,7 @@ class GAT(nn.Module):
         else:
             self._batch_norms = None
 
-    def _apply(self, layer_idx: int, inputs: torch.Tensor) -> torch.Tensor:
+    def _apply_layers(self, layer_idx: int, inputs: torch.Tensor) -> torch.Tensor:
         x = inputs
 
         if self._batch_norms is not None:
@@ -502,7 +502,7 @@ class GAT(nn.Module):
                 x = layer(block, x, efeat).flatten(1, -1)
 
                 if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                    x = self._apply_layers(i, x)
         else:
             x = self._input_dropout(g.srcdata['feat'])
 
@@ -515,7 +515,7 @@ class GAT(nn.Module):
                 x = layer(g, x, efeat).flatten(1, -1)
 
                 if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                    x = self._apply_layers(i, x)
 
         return x
 
