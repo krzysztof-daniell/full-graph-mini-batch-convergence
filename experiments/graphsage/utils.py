@@ -342,7 +342,9 @@ def process_dataset(
     g = dataset[0]
 
     if reverse_edges:
-        g.add_edge(*g.all_edges())
+        src, dst = g.all_edges()
+
+        g.add_edge(dst, src)
 
     if self_loop:
         g = g.remove_self_loop().add_self_loop()
