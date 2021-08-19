@@ -270,7 +270,7 @@ class GAT(nn.Module):
         else:
             self._batch_norms = None
 
-    def _apply(self, layer_idx: int, inputs: torch.Tensor) -> torch.Tensor:
+    def _apply_layers(self, layer_idx: int, inputs: torch.Tensor) -> torch.Tensor:
         x = inputs
 
         if self._batch_norms is not None:
@@ -299,7 +299,7 @@ class GAT(nn.Module):
                 x = layer(block, x, efeat).flatten(1, -1)
 
                 if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                    x = self._apply_layers(i, x)
         else:
             x = self._input_dropout(g.srcdata['feat'])
 
@@ -312,7 +312,7 @@ class GAT(nn.Module):
                 x = layer(g, x, efeat).flatten(1, -1)
 
                 if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                    x = self._apply_layers(i, x)
 
         return x
 

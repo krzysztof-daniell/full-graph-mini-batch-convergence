@@ -48,6 +48,23 @@ class GraphSAGE(nn.Module):
         else:
             self._batch_norms = None
 
+    def _apply_layers(
+        self,
+        layer_idx: int,
+        inputs: torch.Tensor,
+    ) -> torch.Tensor:
+        x = inputs
+
+        if self._batch_norms is not None:
+            x = self._batch_norms[layer_idx](x)
+
+        if self._activation is not None:
+            x = self._activation(x)
+
+        x = self._dropout(x)
+
+        return x
+
     def forward(
         self,
         g: Union[dgl.DGLGraph, list[dgl.DGLGraph]],
@@ -60,24 +77,12 @@ class GraphSAGE(nn.Module):
                 x = layer(block, x)
 
                 if i < self._num_layers - 1:
-                    if self._batch_norms is not None:
-                        x = self._batch_norms[i](x)
-
-                    if self._activation is not None:
-                        x = self._activation(x)
-
-                    x = self._dropout(x)
+                    x = self._apply_layers(i, x)
         else:
             for i, layer in enumerate(self._layers):
                 x = layer(g, x)
 
                 if i < self._num_layers - 1:
-                    if self._batch_norms is not None:
-                        x = self._batch_norms[i](x)
-
-                    if self._activation is not None:
-                        x = self._activation(x)
-
-                    x = self._dropout(x)
+                    x = self._apply_layers(i, x)
 
         return x

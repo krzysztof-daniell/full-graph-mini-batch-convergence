@@ -95,7 +95,7 @@ class Callback:
         train_accuracy: float,
         valid_accuracy: float,
         model: Union[nn.Module, dict[str, nn.Module]],
-    ):
+    ) -> None:
         self._train_times.append(train_time)
         self._valid_times.append(valid_time)
         self._train_losses.append(train_loss)
@@ -196,7 +196,7 @@ def log_metrics_to_sigopt(
     sigopt.log_image(metrics_plot, name='convergence plot')
 
 
-def download_dataset(dataset: str):
+def download_dataset(dataset: str) -> None:
     if dataset == 'ogbn-products':
         command = 'aws s3 cp s3://ogb-products ./dataset --recursive'
         os.system(command)
@@ -215,18 +215,18 @@ class OGBDataset:
         self._predict_category = predict_category
 
     @property
-    def num_labels(self):
+    def num_labels(self) -> int:
         return self._num_labels
 
     @property
-    def num_classes(self):
+    def num_classes(self) -> int:
         return self._num_labels
 
     @property
-    def predict_category(self):
+    def predict_category(self) -> str:
         return self._predict_category
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> Union[dgl.DGLGraph, dgl.DGLHeteroGraph]:
         return self._g
 
 
@@ -306,7 +306,7 @@ def load_ogbn_mag(root: str = None) -> OGBDataset:
     return ogb_dataset
 
 
-def process_dataset(name: str, root: str = None):
+def process_dataset(name: str, root: str = None) -> OGBDataset:
     if root is None:
         root = 'datasets'
 

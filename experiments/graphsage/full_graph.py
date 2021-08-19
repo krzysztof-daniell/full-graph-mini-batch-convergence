@@ -1,7 +1,6 @@
 import argparse
 from collections.abc import Callable
 from timeit import default_timer
-from typing import Union
 
 import dgl
 import sigopt
@@ -16,46 +15,33 @@ from utils import (Callback, download_dataset, log_metrics_to_sigopt,
 
 def train(
     model: nn.Module,
-    device: Union[str, torch.device],
     optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    dataloader: dgl.dataloading.NodeDataLoader,
+    g: dgl.DGLGraph,
+    mask: torch.Tensor,
 ) -> tuple[float]:
-    model.train()
+    features = g.ndata['feat']
+    labels = g.ndata['label']
 
-    total_loss = 0
-    total_accuracy = 0
+    model.train()
+    optimizer.zero_grad()
 
     start = default_timer()
 
-    for step, (_, _, blocks) in enumerate(dataloader):
-        optimizer.zero_grad()
+    logits = model(g, features)
+    loss = loss_function(logits[mask], labels[mask])
 
-        blocks = [block.int().to(device) for block in blocks]
+    loss.backward()
+    optimizer.step()
 
-        inputs = blocks[0].srcdata['feat']
-        labels = blocks[-1].dstdata['label']
-
-        logits = model(blocks, inputs)
-        loss = loss_function(logits, labels)
-
-        loss.backward()
-        optimizer.step()
-
-        _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == labels)
-        accuracy = correct.item() / len(labels)
-
-        total_loss += loss.item()
-        total_accuracy += accuracy
+    _, indices = torch.max(logits[mask], dim=1)
+    correct = torch.sum(indices == labels[mask])
+    accuracy = correct.item() / len(labels[mask])
 
     stop = default_timer()
     time = stop - start
 
-    total_loss /= step + 1
-    total_accuracy /= step + 1
-
-    return time, total_loss, total_accuracy
+    return time, loss, accuracy
 
 
 def validate(
@@ -116,39 +102,7 @@ def run(args: argparse.ArgumentParser) -> None:
         'activation': activations[args.activation],
         'input_dropout': args.input_dropout,
         'dropout': args.dropout,
-        'batch_size': args.batch_size,
     })
-
-    fanouts = [int(i) for i in args.fanouts.split(',')]
-
-    for i in reversed(range(len(fanouts))):
-        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': fanouts[i]})
-
-        fanouts.pop(i)
-
-    for i in range(sigopt.params.num_layers):
-        fanouts.append(sigopt.params[f'layer_{i + 1}_fanout'])
-
-    sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
-    train_dataloader = dgl.dataloading.NodeDataLoader(
-        g,
-        train_idx,
-        sampler,
-        batch_size=sigopt.params.batch_size,
-        shuffle=True,
-        drop_last=False,
-        num_workers=4,
-    )
-
-    # train_dataloader = dgl.dataloading.NodeDataLoader(
-    #     g,
-    #     train_idx,
-    #     sampler,
-    #     batch_size=sigopt.params.batch_size * 256,  # int range(1, 128)
-    #     shuffle=True,
-    #     drop_last=False,
-    #     num_workers=4,
-    # )
 
     in_feats = g.ndata['feat'].shape[-1]
     out_feats = dataset.num_classes
@@ -195,7 +149,7 @@ def run(args: argparse.ArgumentParser) -> None:
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
-            model, device, optimizer, loss_function, train_dataloader)
+            model, optimizer, loss_function, g, train_idx)
         valid_time, valid_loss, valid_accuracy = validate(
             model, loss_function, g, valid_idx)
 
@@ -246,29 +200,27 @@ def run(args: argparse.ArgumentParser) -> None:
             test_time,
         )
     else:
-        log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
+        log_metrics_to_sigopt(checkpoint, 'GraphSAGE', args.dataset)
 
 
 if __name__ == '__main__':
-    argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
+    argparser = argparse.ArgumentParser('GraphSAGE Optimization')
 
     argparser.add_argument('--dataset', default='ogbn-products', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
-    argparser.add_argument('--lr', default=0.003, type=float)
+    argparser.add_argument('--lr', default=0.01, type=float)
     argparser.add_argument('--hidden-feats', default=256, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--aggregator-type', default='mean',
                            type=str, choices=['mean', 'gcn', 'lstm'])
-    argparser.add_argument('--batch-norm', default=True,
+    argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['relu', 'leaky_relu'])
     argparser.add_argument('--input-dropout', default=0.1, type=float)
     argparser.add_argument('--dropout', default=0.5, type=float)
-    argparser.add_argument('--batch-size', default=1000, type=int)
-    argparser.add_argument('--fanouts', default='5,10,15', type=str)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)

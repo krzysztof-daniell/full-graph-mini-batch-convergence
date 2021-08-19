@@ -6,7 +6,6 @@ import dgl
 import dgl.nn.pytorch as dglnn
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class RelGraphConvLayer(nn.Module):
@@ -55,7 +54,7 @@ class RelGraphConvLayer(nn.Module):
             nn.init.xavier_uniform_(
                 self.self_loop_weight, gain=nn.init.calculate_gain('relu'))
 
-    def _apply(
+    def _apply_layers(
         self,
         ntype: str,
         inputs: torch.Tensor,
@@ -101,7 +100,7 @@ class RelGraphConvLayer(nn.Module):
             inputs_dst = None
 
         x = self._conv(hg, inputs, mod_kwargs=weight_dict)
-        x = {ntype: self._apply(ntype, h, inputs_dst)
+        x = {ntype: self._apply_layers(ntype, h, inputs_dst)
              for ntype, h in x.items()}
 
         return x
@@ -239,7 +238,7 @@ class EntityClassify(nn.Module):
         else:
             self._batch_norms = None
 
-    def _apply(
+    def _apply_layers(
         self,
         layer_idx: int,
         inputs: dict[str, torch.Tensor],
@@ -269,13 +268,13 @@ class EntityClassify(nn.Module):
                 x = layer(block, x)
 
                 if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                    x = self._apply_layers(i, x)
         else:
             for i, layer in enumerate(self._layers):
                 x = layer(hg, x)
 
                 if i < self._num_layers - 1:
-                    x = self._apply(i, x)
+                    x = self._apply_layers(i, x)
 
         return x
 
