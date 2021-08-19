@@ -146,7 +146,17 @@ def get_metrics_plot(
     ax_loss.plot(np.array(train_losses), 'b--', label='Train Loss')
     ax_loss.plot(np.array(valid_losses), 'r--', label='Validation Loss')
     ax_loss.set_ylabel('Loss', color='black')
-    ax_loss.legend(loc='center left')
+
+    h_accuracy, l_accuracy = ax_accuracy.get_legend_handles_labels()
+    h_loss, l_loss = ax_loss.get_legend_handles_labels()
+
+    ax_accuracy.legend(
+        handles=h_accuracy + h_loss,
+        labels=l_accuracy + l_loss,
+        bbox_to_anchor=(0.5, 1.01),
+        loc='lower center',
+        ncol=2,
+    )
 
     plt.show()
 
