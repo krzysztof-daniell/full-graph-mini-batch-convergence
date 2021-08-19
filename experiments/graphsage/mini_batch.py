@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from experiments.model import GraphSAGE
+from model import GraphSAGE
 from utils import (Callback, download_dataset, log_metrics_to_sigopt,
                    process_dataset)
 
