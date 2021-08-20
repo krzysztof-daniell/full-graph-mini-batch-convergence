@@ -257,7 +257,7 @@ class EntityClassify(nn.Module):
 
     def forward(
         self,
-        hg: Union[dgl.DGLHeteroGraph, tuple[dgl.DGLHeteroGraph]],
+        hg: Union[dgl.DGLHeteroGraph, list[dgl.DGLHeteroGraph]],
         inputs: dict[str, torch.Tensor],
     ) -> dict[str, torch.Tensor]:
         x = {ntype: self._input_dropout(h) for ntype, h in inputs.items()}

@@ -20,7 +20,7 @@ def train(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    features = g.ndata['feat']
+    inputs = g.ndata['feat']
     labels = g.ndata['label']
 
     model.train()
@@ -28,12 +28,12 @@ def train(
 
     start = default_timer()
 
-    logits = model(g, features)
+    logits = model(g, inputs)
     loss = loss_function(logits[mask], labels[mask])
 
     loss.backward()
     optimizer.step()
-    
+
     loss = loss.item()
 
     _, indices = torch.max(logits[mask], dim=1)
@@ -52,7 +52,7 @@ def validate(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    features = g.ndata['feat']
+    inputs = g.ndata['feat']
     labels = g.ndata['label']
 
     model.eval()
@@ -60,7 +60,7 @@ def validate(
     start = default_timer()
 
     with torch.no_grad():
-        logits = model(g, features)
+        logits = model(g, inputs)
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)
@@ -85,15 +85,8 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    aggregator_types = {
-        'mean': 0,
-        'gcn': 1,
-        'lstm': 2,
-    }
-    activations = {
-        'relu': 0,
-        'leaky_relu': 1,
-    }
+    aggregator_types = {'gcn': 0, 'mean': 1}
+    activations = {'leaky_relu': 0, 'relu': 1}
 
     sigopt.params.setdefaults({
         'lr': args.lr,
@@ -109,15 +102,8 @@ def run(args: argparse.ArgumentParser) -> None:
     in_feats = g.ndata['feat'].shape[-1]
     out_feats = dataset.num_classes
 
-    aggregator_types = {
-        '0': 'mean',
-        '1': 'gcn',
-        '2': 'lstm',
-    }
-    activations = {
-        '0': F.relu,
-        '1': F.leaky_relu,
-    }
+    aggregator_types = {'0': 'gcn', '1': 'mean'}
+    activations = {'0': F.leaky_relu, '1': F.relu}
 
     model = GraphSAGE(
         in_feats,
@@ -221,7 +207,7 @@ if __name__ == '__main__':
     argparser.add_argument('--hidden-feats', default=256, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--aggregator-type', default='mean',
-                           type=str, choices=['gcn', 'mean', 'lstm', 'pool'])
+                           type=str, choices=['gcn', 'mean'])
     argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--input-dropout', default=0.1, type=float)

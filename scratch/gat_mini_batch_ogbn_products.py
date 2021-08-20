@@ -35,7 +35,8 @@ if __name__ == '__main__':
     dropout = 0  # 0.5
     negative_slope = 0.2
     residual = False  # True
-    use_attn_dst = False  # True
+    bias = True
+    use_attn_dst = True  # True
 
     # batch_size = (len(train_idx) + 29) // 30  # 6554
     batch_size = 512  # 6554
@@ -71,6 +72,7 @@ if __name__ == '__main__':
         residual=residual,
         activation=activation,
         use_attn_dst=use_attn_dst,
+        bias=bias,
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
@@ -81,8 +83,8 @@ if __name__ == '__main__':
     for epoch in range(1, 1 + num_epochs):
         train_time, train_loss, train_accuracy = train_mini_batch(
             model, device, optimizer, loss_function, train_dataloader)
-        # valid_time, valid_loss, valid_accuracy = validate(
-        #     model, loss_function, g, valid_idx)
+        valid_time, valid_loss, valid_accuracy = validate(
+            model, loss_function, g, valid_idx)
         test_time, test_loss, test_accuracy = validate(
             model, loss_function, g, test_idx)
 
@@ -91,11 +93,11 @@ if __name__ == '__main__':
         print(
             f'Epoch: {epoch:03} '
             f'Train Loss: {train_loss:.2f} '
-            # f'valid Loss: {valid_loss:.2f} '
+            f'Valid Loss: {valid_loss:.2f} '
             f'Test Loss: {test_loss:.2f} '
             f'Train Accuracy: {train_accuracy * 100:.2f} % '
-            # f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
+            f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
             f'Test Accuracy: {test_accuracy * 100:.2f} % '
-            f'Epoch time: {train_time:.2f} '
-            f'Training time: {training_time:.2f} '
+            f'Epoch Time: {train_time:.2f} '
+            f'Training Time: {training_time:.2f} '
         )

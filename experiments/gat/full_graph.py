@@ -8,36 +8,31 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from model import EntityClassify, RelGraphEmbedding
+from model import GAT
 from utils import (Callback, download_dataset, log_metrics_to_sigopt,
                    process_dataset)
 
 
 def train(
-    embedding_layer: nn.Module,
     model: nn.Module,
-    embedding_optimizer: torch.optim.Optimizer,
-    model_optimizer: torch.optim.Optimizer,
+    optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    hg: dgl.DGLHeteroGraph,
-    labels: torch.Tensor,
-    predict_category: str,
+    g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
+    inputs = g.ndata['feat']
+    labels = g.ndata['label']
+
     model.train()
+    optimizer.zero_grad()
 
     start = default_timer()
 
-    embedding_optimizer.zero_grad()
-    model_optimizer.zero_grad()
-
-    embedding = embedding_layer()
-    logits = model(hg, embedding)[predict_category]
+    logits = model(g, inputs)
     loss = loss_function(logits[mask], labels[mask])
 
     loss.backward()
-    model_optimizer.step()
-    embedding_optimizer.step()
+    optimizer.step()
 
     loss = loss.item()
 
@@ -52,21 +47,20 @@ def train(
 
 
 def validate(
-    embedding_layer: nn.Module,
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    hg: dgl.DGLHeteroGraph,
-    labels: torch.Tensor,
-    predict_category: str,
+    g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
+    inputs = g.ndata['feat']
+    labels = g.ndata['label']
+
     model.eval()
 
     start = default_timer()
 
     with torch.no_grad():
-        embedding = embedding_layer()
-        logits = model(hg, embedding)[predict_category]
+        logits = model(g, inputs)
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)
@@ -82,96 +76,74 @@ def validate(
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, hg, train_idx, valid_idx, test_idx = process_dataset(
+    dataset, g, train_idx, valid_idx, test_idx = process_dataset(
         args.dataset,
         root='/home/ksadowski/datasets',
+        reverse_edges=args.graph_reverse_edges,
+        self_loop=args.graph_self_loop,
     )
-    predict_category = dataset.predict_category
-    labels = hg.nodes[predict_category].data['labels']
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    norms = {'both': 0, 'none': 1, 'right': 2}
+    norms = {'both': 0, 'left': 1, 'none': 2, 'right': 3}
     activations = {'leaky_relu': 0, 'relu': 1}
 
     sigopt.params.setdefaults({
-        'embedding_lr': args.embedding_lr,
-        'model_lr': args.model_lr,
+        'lr': args.lr,
         'hidden_feats': args.hidden_feats,
-        'num_bases': args.num_bases,
+        'num_heads': args.num_heads,
         'num_layers': args.num_layers,
         'norm': norms[args.norm],
         'batch_norm': int(args.batch_norm),
-        'activation': activations[args.activation],
         'input_dropout': args.input_dropout,
+        'attn_dropout': args.attn_dropout,
+        'edge_dropout': args.edge_dropout,
         'dropout': args.dropout,
-        'self_loop': args.self_loop,
+        'negative_slope': args.negative_slope,
+        'residual': int(args.residual),
+        'activation': activations[args.activation],
+        'use_attn_dst': int(args.use_attn_dst),
+        'bias': int(args.bias),
     })
 
-    in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
+    node_in_feats = g.ndata['feat'].shape[-1]
+    edge_in_feats = 0
     out_feats = dataset.num_classes
 
-    num_nodes = {}
-    node_feats = {}
-
-    for ntype in hg.ntypes:
-        num_nodes[ntype] = hg.num_nodes(ntype)
-        node_feats[ntype] = hg.nodes[ntype].data.get('feat')
-
-    norms = {'0': 'both', '1': 'none', '2': 'right'}
+    norms = {'0': 'both', '1': 'left', '2': 'none', '3': 'right'}
     activations = {'0': F.leaky_relu, '1': F.relu}
 
-    embedding_layer = RelGraphEmbedding(
-        hg,
-        in_feats,
-        num_nodes,
-        node_feats,
-    )
-    model = EntityClassify(
-        hg,
-        in_feats,
+    model = GAT(
+        node_in_feats,
+        edge_in_feats,
         sigopt.params.hidden_feats,
         out_feats,
-        sigopt.params.num_bases,
+        sigopt.params.num_heads,
         sigopt.params.num_layers,
         norm=norms[f'{sigopt.params.norm}'],
         batch_norm=bool(sigopt.params.batch_norm),
         input_dropout=sigopt.params.input_dropout,
+        attn_dropout=sigopt.params.attn_dropout,
+        edge_dropout=sigopt.params.edge_dropout,
         dropout=sigopt.params.dropout,
+        negative_slope=sigopt.params.negative_slope,
+        residual=bool(sigopt.params.residual),
         activation=activations[f'{sigopt.params.activation}'],
-        self_loop=sigopt.params.self_loop,
-    )
+        use_attn_dst=bool(sigopt.params.use_attn_dst),
+        bias=bool(sigopt.params.bias),
+    ).to(device)
 
     loss_function = nn.CrossEntropyLoss().to(device)
-    embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
-    model_optimizer = torch.optim.Adam(
-        model.parameters(), lr=sigopt.params.model_lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
 
     checkpoint = Callback(args.early_stopping_patience,
                           args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
-            embedding_layer,
-            model,
-            embedding_optimizer,
-            model_optimizer,
-            loss_function,
-            hg,
-            labels,
-            predict_category,
-            train_idx,
-        )
+            model, optimizer, loss_function, g, train_idx)
         valid_time, valid_loss, valid_accuracy = validate(
-            embedding_layer,
-            model,
-            loss_function,
-            hg,
-            labels,
-            predict_category,
-            valid_idx,
-        )
+            model, loss_function, g, valid_idx)
 
         checkpoint.create(
             epoch,
@@ -203,14 +175,7 @@ def run(args: argparse.ArgumentParser) -> None:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
         test_time, test_loss, test_accuracy = validate(
-            embedding_layer,
-            model,
-            loss_function,
-            hg,
-            labels,
-            predict_category,
-            test_idx,
-        )
+            model, loss_function, g, test_idx)
 
         print(
             f'Test Loss: {test_loss:.2f} '
@@ -220,38 +185,48 @@ def run(args: argparse.ArgumentParser) -> None:
 
         log_metrics_to_sigopt(
             checkpoint,
-            'RGCN',
+            'GAT',
             args.dataset,
             test_loss,
             test_accuracy,
             test_time,
         )
     else:
-        log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
+        log_metrics_to_sigopt(checkpoint, 'GAT', args.dataset)
 
 
 if __name__ == '__main__':
-    argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
+    argparser = argparse.ArgumentParser('GAT Optimization')
 
-    argparser.add_argument('--dataset', default='ogbn-mag', type=str,
-                           choices=['ogbn-mag'])
+    argparser.add_argument('--dataset', default='ogbn-products', type=str,
+                           choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--graph-reverse-edges', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--graph-self-loop', default=False,
+                           action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
-    argparser.add_argument('--embedding-lr', default=0.01, type=float)
-    argparser.add_argument('--model-lr', default=0.01, type=float)
-    argparser.add_argument('--hidden-feats', default=64, type=int)
-    argparser.add_argument('--num-bases', default=2, type=int)
-    argparser.add_argument('--num-layers', default=2, type=int)
-    argparser.add_argument('--norm', default='right',
-                           type=str, choices=['both', 'none', 'right'])
+    argparser.add_argument('--lr', default=0.001, type=float)
+    argparser.add_argument('--hidden-feats', default=128, type=int)
+    argparser.add_argument('--num-heads', default=4, type=int)
+    argparser.add_argument('--num-layers', default=3, type=int)
+    argparser.add_argument('--norm', default='none',
+                           type=str, choices=['both', 'left', 'none', 'right'])
     argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--input-dropout', default=0.1, type=float)
-    argparser.add_argument('--dropout', default=0.5, type=float)
+    argparser.add_argument('--input-dropout', default=0, type=float)
+    argparser.add_argument('--attn-dropout', default=0, type=float)
+    argparser.add_argument('--edge-dropout', default=0, type=float)
+    argparser.add_argument('--dropout', default=0, type=float)
+    argparser.add_argument('--negative-slope', default=0.2, type=float)
+    argparser.add_argument('--residual', default=False,
+                           action=argparse.BooleanOptionalAction)
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['leaky_relu', 'relu'])
-    argparser.add_argument('--self-loop', default=True,
+    argparser.add_argument('--use-attn-dst', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--bias', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',

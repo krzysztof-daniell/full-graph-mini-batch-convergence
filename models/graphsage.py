@@ -140,7 +140,7 @@ def train_full_graph(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    features = g.ndata['feat']
+    inputs = g.ndata['feat']
     labels = g.ndata['label']
 
     model.train()
@@ -148,7 +148,7 @@ def train_full_graph(
 
     start = default_timer()
 
-    logits = model(g, features)
+    logits = model(g, inputs)
     loss = loss_function(logits[mask], labels[mask])
 
     loss.backward()
@@ -172,7 +172,7 @@ def validate(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    features = g.ndata['feat']
+    inputs = g.ndata['feat']
     labels = g.ndata['label']
 
     model.eval()
@@ -180,7 +180,7 @@ def validate(
     start = default_timer()
 
     with torch.no_grad():
-        logits = model(g, features)
+        logits = model(g, inputs)
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)
