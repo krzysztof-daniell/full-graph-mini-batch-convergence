@@ -144,16 +144,6 @@ def run(args: argparse.ArgumentParser) -> None:
         num_workers=4,
     )
 
-    # train_dataloader = dgl.dataloading.NodeDataLoader(
-    #     g,
-    #     train_idx,
-    #     sampler,
-    #     batch_size=sigopt.params.batch_size * 256,  # int range(1, 128)
-    #     shuffle=True,
-    #     drop_last=False,
-    #     num_workers=4,
-    # )
-
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
 
