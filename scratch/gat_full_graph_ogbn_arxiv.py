@@ -28,15 +28,15 @@ if __name__ == '__main__':
     out_feats = dataset.num_classes
     num_heads = 4
     num_layers = 3
-    norm = 'both'
-    batch_norm = True
+    norm = 'none'
+    batch_norm = False
     activation = F.relu
     input_dropout = 0.1
     attn_dropout = 0
     edge_dropout = 0.1
     dropout = 0.75
     negative_slope = 0.2
-    residual = True
+    residual = False
     use_attn_dst = True
     allow_zero_in_degree = True
 

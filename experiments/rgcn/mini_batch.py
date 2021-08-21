@@ -105,15 +105,8 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    norms = {
-        'none': 0,
-        'right': 1,
-        'both': 2,
-    }
-    activations = {
-        'relu': 0,
-        'leaky_relu': 1,
-    }
+    norms = {'both': 0, 'none': 1, 'right': 2}
+    activations = {'leaky_relu': 0, 'relu': 1}
 
     # sigopt.params.setdefaults({
     #     'embedding_lr': args.embedding_lr,
@@ -151,16 +144,6 @@ def run(args: argparse.ArgumentParser) -> None:
         num_workers=4,
     )
 
-    # train_dataloader = dgl.dataloading.NodeDataLoader(
-    #     g,
-    #     train_idx,
-    #     sampler,
-    #     batch_size=sigopt.params.batch_size * 256,  # int range(1, 128)
-    #     shuffle=True,
-    #     drop_last=False,
-    #     num_workers=4,
-    # )
-
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
     num_nodes = {}
@@ -170,15 +153,8 @@ def run(args: argparse.ArgumentParser) -> None:
         num_nodes[ntype] = hg.num_nodes(ntype)
         node_feats[ntype] = hg.nodes[ntype].data.get('feat')
 
-    norms = {
-        '0': 'none',
-        '1': 'right',
-        '2': 'both',
-    }
-    activations = {
-        '0': F.relu,
-        '1': F.leaky_relu,
-    }
+    norms = {'0': 'both', '1': 'none', '2': 'right'}
+    activations = {'0': F.leaky_relu, '1': F.relu}
 
     embedding_layer = RelGraphEmbedding(
         hg,

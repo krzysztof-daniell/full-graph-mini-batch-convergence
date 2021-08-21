@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from model import GraphSAGE
+from model import GAT
 from utils import (Callback, download_dataset, log_metrics_to_sigopt,
                    process_dataset)
 
@@ -90,95 +90,85 @@ def run(args: argparse.ArgumentParser) -> None:
 
     dataset, g, train_idx, valid_idx, test_idx = process_dataset(
         args.dataset,
-        root=args.dataset_root,
+        root='/home/ksadowski/datasets',
         reverse_edges=args.graph_reverse_edges,
         self_loop=args.graph_self_loop,
     )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    aggregator_types = {'gcn': 0, 'mean': 1}
+    norms = {'both': 0, 'left': 1, 'none': 2, 'right': 3}
     activations = {'leaky_relu': 0, 'relu': 1}
 
-    # sigopt.params.setdefaults({
-    #     'lr': args.lr,
-    #     'hidden_feats': args.hidden_feats,
-    #     'num_layers': args.num_layers,
-    #     'aggregator_type': aggregator_types[args.aggregator_type],
-    #     'batch_norm': str(args.batch_norm),
-    #     'activation': activations[args.activation],
-    #     'input_dropout': args.input_dropout,
-    #     'dropout': args.dropout,
-    #     'batch_size': args.batch_size,
-    # })
+    sigopt.params.setdefaults({
+        'lr': args.lr,
+        'hidden_feats': args.hidden_feats,
+        'num_heads': args.num_heads,
+        'num_layers': args.num_layers,
+        'norm': norms[args.norm],
+        'batch_norm': int(args.batch_norm),
+        'input_dropout': args.input_dropout,
+        'attn_dropout': args.attn_dropout,
+        'edge_dropout': args.edge_dropout,
+        'dropout': args.dropout,
+        'negative_slope': args.negative_slope,
+        'residual': int(args.residual),
+        'activation': activations[args.activation],
+        'use_attn_dst': int(args.use_attn_dst),
+        'bias': int(args.bias),
+        'batch_size': args.batch_size,
+    })
 
     fanouts = [int(i) for i in args.fanouts.split(',')]
-    # for i in reversed(range(len(fanouts))):
-    #     sigopt.params.setdefaults({f'layer_{i + 1}_fanout': fanouts[i]})
 
-    #     fanouts.pop(i)
+    for i in reversed(range(len(fanouts))):
+        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': fanouts[i]})
 
-    # for i in range(sigopt.params.num_layers):
-    #     fanouts.append(sigopt.params[f'layer_{i + 1}_fanout'])
+        fanouts.pop(i)
+
+    for i in range(sigopt.params.num_layers):
+        fanouts.append(sigopt.params[f'layer_{i + 1}_fanout'])
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
         g,
         train_idx,
         sampler,
-        batch_size=512,#sigopt.params.batch_size,
+        batch_size=sigopt.params.batch_size,
         shuffle=True,
         drop_last=False,
         num_workers=4,
     )
 
-    # train_dataloader = dgl.dataloading.NodeDataLoader(
-    #     g,
-    #     train_idx,
-    #     sampler,
-    #     batch_size=sigopt.params.batch_size * 256,  # int range(1, 128)
-    #     shuffle=True,
-    #     drop_last=False,
-    #     num_workers=4,
-    # )
-
-    in_feats = g.ndata['feat'].shape[-1]
+    node_in_feats = g.ndata['feat'].shape[-1]
+    edge_in_feats = 0
     out_feats = dataset.num_classes
 
-    aggregator_types = {'0': 'gcn', '1': 'mean'}
+    norms = {'0': 'both', '1': 'left', '2': 'none', '3': 'right'}
     activations = {'0': F.leaky_relu, '1': F.relu}
 
-    model = GraphSAGE(
-        in_feats,
-        12,#sigopt.params.hidden_feats,
+    model = GAT(
+        node_in_feats,
+        edge_in_feats,
+        sigopt.params.hidden_feats,
         out_feats,
-        3,#sigopt.params.num_layers,
-        #aggregator_type=aggregator_types[f'{sigopt.params.aggregator_type}'],
-        aggregator_type="mean",
-        #batch_norm=bool(sigopt.params.batch_norm),
-        batch_norm=True,
-        input_dropout=.1,#sigopt.params.input_dropout,
-        dropout=.5,#sigopt.params.dropout,
-        # activation=activations[f'{sigopt.params.activation}'],
-        activation=F.leaky_relu
+        sigopt.params.num_heads,
+        sigopt.params.num_layers,
+        norm=norms[f'{sigopt.params.norm}'],
+        batch_norm=bool(sigopt.params.batch_norm),
+        input_dropout=sigopt.params.input_dropout,
+        attn_dropout=sigopt.params.attn_dropout,
+        edge_dropout=sigopt.params.edge_dropout,
+        dropout=sigopt.params.dropout,
+        negative_slope=sigopt.params.negative_slope,
+        residual=bool(sigopt.params.residual),
+        activation=activations[f'{sigopt.params.activation}'],
+        use_attn_dst=bool(sigopt.params.use_attn_dst),
+        bias=bool(sigopt.params.bias),
     ).to(device)
 
-    # model = GraphSAGE(
-    #     in_feats,
-    #     sigopt.params.hidden_feats * 16,  # int range(4, 64)
-    #     out_feats,
-    #     sigopt.params.num_layers,  # int range(2, 5)
-    #     aggregator_types[f'{sigopt.params.aggregator_type}'],
-    #     bool(sigopt.params.batch_norm),
-    #     activations[f'{sigopt.params.activation}'],
-    #     sigopt.params.input_dropout * 0.05,  # int range(0, 19)
-    #     sigopt.params.dropout * 0.05,  # int range(0, 19)
-    # ).to(device)
-
     loss_function = nn.CrossEntropyLoss().to(device)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-
+    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
 
     checkpoint = Callback(args.early_stopping_patience,
                           args.early_stopping_monitor)
@@ -189,16 +179,16 @@ def run(args: argparse.ArgumentParser) -> None:
         valid_time, valid_loss, valid_accuracy = validate(
             model, loss_function, g, valid_idx)
 
-        # checkpoint.create(
-        #     epoch,
-        #     train_time,
-        #     valid_time,
-        #     train_loss,
-        #     valid_loss,
-        #     train_accuracy,
-        #     valid_accuracy,
-        #     model,
-        # )
+        checkpoint.create(
+            epoch,
+            train_time,
+            valid_time,
+            train_loss,
+            valid_loss,
+            train_accuracy,
+            valid_accuracy,
+            model,
+        )
 
         print(
             f'Epoch: {epoch + 1:03} '
@@ -227,25 +217,23 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        # log_metrics_to_sigopt(
-        #     checkpoint,
-        #     'GraphSAGE NS',
-        #     args.dataset,
-        #     test_loss,
-        #     test_accuracy,
-        #     test_time,
-        # )
+        log_metrics_to_sigopt(
+            checkpoint,
+            'GAT NS',
+            args.dataset,
+            test_loss,
+            test_accuracy,
+            test_time,
+        )
     else:
-        pass
-        #log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
+        log_metrics_to_sigopt(checkpoint, 'GAT NS', args.dataset)
 
 
 if __name__ == '__main__':
-    argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
+    argparser = argparse.ArgumentParser('GAT NS Optimization')
 
     argparser.add_argument('--dataset', default='ogbn-products', type=str,
                            choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
-    argparser.add_argument('--dataset_root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-reverse-edges', default=False,
@@ -253,19 +241,29 @@ if __name__ == '__main__':
     argparser.add_argument('--graph-self-loop', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
-    argparser.add_argument('--lr', default=0.003, type=float)
-    argparser.add_argument('--hidden-feats', default=256, type=int)
+    argparser.add_argument('--lr', default=0.001, type=float)
+    argparser.add_argument('--hidden-feats', default=128, type=int)
+    argparser.add_argument('--num-heads', default=4, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
-    argparser.add_argument('--aggregator-type', default='mean',
-                           type=str, choices=['gcn', 'mean'])
+    argparser.add_argument('--norm', default='none',
+                           type=str, choices=['both', 'left', 'none', 'right'])
     argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--input-dropout', default=0.1, type=float)
-    argparser.add_argument('--dropout', default=0.5, type=float)
+    argparser.add_argument('--input-dropout', default=0, type=float)
+    argparser.add_argument('--attn-dropout', default=0, type=float)
+    argparser.add_argument('--edge-dropout', default=0, type=float)
+    argparser.add_argument('--dropout', default=0, type=float)
+    argparser.add_argument('--negative-slope', default=0.2, type=float)
+    argparser.add_argument('--residual', default=False,
+                           action=argparse.BooleanOptionalAction)
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['leaky_relu', 'relu'])
-    argparser.add_argument('--batch-size', default=1000, type=int)
-    argparser.add_argument('--fanouts', default='5,10,15', type=str)
+    argparser.add_argument('--use-attn-dst', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--bias', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--batch-size', default=512, type=int)
+    argparser.add_argument('--fanouts', default='10,10,10', type=str)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)

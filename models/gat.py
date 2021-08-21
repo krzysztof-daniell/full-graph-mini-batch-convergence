@@ -5,7 +5,6 @@ from typing import Union
 import dgl
 import dgl.function as fn
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
 from dgl.ops import edge_softmax
 from dgl.utils import expand_as_pair
@@ -26,6 +25,7 @@ class GATConv(nn.Module):
         activation: Callable[[torch.Tensor], torch.Tensor] = None,
         use_attn_dst: bool = True,
         allow_zero_in_degree: bool = True,
+        bias: bool = True,
     ):
         super().__init__()
         self._out_feats = out_feats
@@ -38,50 +38,64 @@ class GATConv(nn.Module):
         self._allow_zero_in_degree = allow_zero_in_degree
         self._in_src_feats, self._in_dst_feats = expand_as_pair(node_in_feats)
 
-        self._fc_src = nn.Linear(
-            self._in_src_feats, out_feats * num_heads, bias=False)
-
-        if residual:
+        if isinstance(node_in_feats, tuple):
+            self._fc_src = nn.Linear(
+                self._in_src_feats, num_heads * out_feats, bias=False)
             self._fc_dst = nn.Linear(
-                self._in_dst_feats, out_feats * num_heads, bias=False)
-            self.bias = None
+                self._in_dst_feats, num_heads * out_feats, bias=False)
         else:
-            self._fc_dst = None
-            self.bias = nn.Parameter(torch.Tensor(out_feats))
+            self._fc = nn.Linear(self._in_src_feats,
+                                 num_heads * out_feats, bias=False)
 
-        self._attn_fc_src = nn.Linear(
-            self._in_src_feats, num_heads, bias=False)
+        self._attn_fc_src = nn.Parameter(torch.Tensor(1, num_heads, out_feats))
 
         if use_attn_dst:
-            self._attn_fc_dst = nn.Linear(
-                self._in_src_feats, num_heads, bias=False)
+            self._attn_fc_dst = nn.Parameter(
+                torch.Tensor(1, num_heads, out_feats))
         else:
             self._attn_fc_dst = None
 
         if edge_in_feats > 0:
             self._attn_fc_edge = nn.Linear(
-                edge_in_feats, num_heads, bias=False)
+                edge_in_feats, num_heads, bias=False)  # TODO: if node attentions are parameters unify it
         else:
-            self._attn_fc_edge = None
+            self.register_buffer('_attn_fc_edge', None)
+
+        if residual:
+            self._fc_res = nn.Linear(
+                self._in_dst_feats, num_heads * out_feats, bias=False)
+        else:
+            self.register_buffer('_fc_res', None)
+
+        if bias:
+            self._bias = nn.Parameter(torch.Tensor(num_heads * out_feats))
+        else:
+            self.register_buffer('_bias', None)
+
+        self.reset_parameters()
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('relu')
 
-        nn.init.xavier_normal_(self._fc_src.weight, gain=gain)
-
-        if self._fc_dst is not None:
+        if hasattr(self, '_fc'):
+            nn.init.xavier_normal_(self._fc.weight, gain=gain)
+        else:
+            nn.init.xavier_normal_(self._fc_src.weight, gain=gain)
             nn.init.xavier_normal_(self._fc_dst.weight, gain=gain)
 
-        nn.init.xavier_normal_(self._attn_fc_src.weight, gain=gain)
+        nn.init.xavier_normal_(self._attn_fc_src, gain=gain)
 
         if self._attn_fc_dst is not None:
-            nn.init.xavier_normal_(self._attn_fc_dst.weight, gain=gain)
+            nn.init.xavier_normal_(self._attn_fc_dst, gain=gain)
 
         if self._attn_fc_edge is not None:
             nn.init.xavier_normal_(self._attn_fc_edge.weight, gain=gain)
 
-        if self.bias is not None:
-            nn.init.zeros_(self.bias)
+        if self._fc_res is not None:
+            nn.init.xavier_normal_(self._fc_res.weight, gain=gain)
+
+        if self._bias is not None:
+            nn.init.zeros_(self._bias)
 
     def set_allow_zero_in_degree(self, value: bool):
         self._allow_zero_in_degree = value
@@ -97,17 +111,32 @@ class GATConv(nn.Module):
                 if (g.in_degrees() == 0).any():
                     assert False
 
-        if g.is_block:
-            node_inputs_dst = node_inputs[:g.num_dst_nodes()]
+        if isinstance(node_inputs, tuple):
+            node_inputs_src = node_inputs[0]
+            node_inputs_dst = node_inputs[1]
+
+            if not hasattr('_fc_src'):
+                feat_fc_src = self._fc(node_inputs_src).view(
+                    -1, self._num_heads, self._out_feats)
+                feat_fc_dst = self._fc(node_inputs_dst).view(
+                    -1, self._num_heads, self._out_feats)
+            else:
+                feat_fc_src = self._fc_src(node_inputs_src).view(
+                    -1, self._num_heads, self._out_feats)
+                feat_fc_dst = self._fc_dst(node_inputs_dst).view(
+                    -1, self._num_heads, self._out_feats)
         else:
             node_inputs_dst = node_inputs
 
-        feat_fc_src = self._fc_src(node_inputs).view(
-            -1, self._num_heads, self._out_feats)
-
-        if self._fc_dst is not None:
-            feat_fc_dst = self._fc_dst(node_inputs_dst).view(
+            feat_fc_src = self._fc(node_inputs).view(
                 -1, self._num_heads, self._out_feats)
+
+            if g.is_block:
+                node_inputs_dst = node_inputs_dst[:g.num_dst_nodes()]
+
+                feat_fc_dst = feat_fc_src[:g.num_dst_nodes()]
+            else:
+                feat_fc_dst = feat_fc_src
 
         if self._norm in ['both', 'left']:
             degrees = g.out_degrees().float().clamp(min=1)
@@ -122,16 +151,14 @@ class GATConv(nn.Module):
 
             feat_fc_src *= norm
 
-        attn_src = self._attn_fc_src(node_inputs).view(
-            -1, self._num_heads, 1)
-
+        attn_src = (feat_fc_src * self._attn_fc_src).sum(dim=-1).unsqueeze(-1)
         g.srcdata.update({'feat_fc_src': feat_fc_src, 'attn_src': attn_src})
 
         if self._attn_fc_dst is not None:
-            attn_dst = self._attn_fc_dst(
-                node_inputs_dst).view(-1, self._num_heads, 1)
-
+            attn_dst = (feat_fc_dst * self._attn_fc_dst).sum(
+                dim=-1).unsqueeze(-1)
             g.dstdata.update({'attn_dst': attn_dst})
+
             g.apply_edges(fn.u_add_v('attn_src', 'attn_dst', 'attn_node'))
         else:
             g.apply_edges(fn.copy_u('attn_src', 'attn_node'))
@@ -153,8 +180,8 @@ class GATConv(nn.Module):
             eids = perm[bound:]
 
             g.edata['attn'] = torch.zeros_like(e)
-            g.edata['attn'][eids] = self._attn_dropout(
-                edge_softmax(g, e[eids], eids=eids))
+            g.edata['attn'][eids] = self._attn_dropout(edge_softmax(
+                g, e[eids], eids=eids))
         else:
             g.edata['attn'] = self._attn_dropout(edge_softmax(g, e))
 
@@ -175,10 +202,12 @@ class GATConv(nn.Module):
 
             x *= norm
 
-        if self._fc_dst is not None:
-            x += feat_fc_dst
-        else:
-            x += self.bias
+        if self._fc_res is not None:
+            x += self._fc_res(node_inputs_dst).view(
+                node_inputs_dst.shape[0], -1, self._out_feats)
+
+        if self._bias is not None:
+            x += self._bias.view(-1, self._out_feats)
 
         if self._activation is not None:
             x = self._activation(x)
@@ -206,6 +235,7 @@ class GAT(nn.Module):
         activation: Callable[[torch.Tensor], torch.Tensor] = None,
         use_attn_dst: bool = True,
         allow_zero_in_degree: bool = True,
+        bias: bool = True,
     ):
         super().__init__()
         self._edge_in_feats = edge_in_feats
@@ -230,6 +260,7 @@ class GAT(nn.Module):
             residual=residual,
             use_attn_dst=use_attn_dst,
             allow_zero_in_degree=allow_zero_in_degree,
+            bias=bias,
         ))
 
         for _ in range(1, num_layers - 1):
@@ -245,6 +276,7 @@ class GAT(nn.Module):
                 residual=residual,
                 use_attn_dst=use_attn_dst,
                 allow_zero_in_degree=allow_zero_in_degree,
+                bias=bias,
             ))
 
         self._layers.append(GATConv(
@@ -259,18 +291,23 @@ class GAT(nn.Module):
             residual=residual,
             use_attn_dst=use_attn_dst,
             allow_zero_in_degree=allow_zero_in_degree,
+            bias=bias,
         ))
 
         if batch_norm:
             self._batch_norms = nn.ModuleList()
 
             for _ in range(num_layers - 1):
-                self._batch_norms.append(
-                    nn.BatchNorm1d(num_heads * hidden_feats))
+                self._batch_norms.append(nn.BatchNorm1d(
+                    num_heads * hidden_feats))
         else:
             self._batch_norms = None
 
-    def _apply_layers(self, layer_idx: int, inputs: torch.Tensor) -> torch.Tensor:
+    def _apply_layers(
+        self,
+        layer_idx: int,
+        inputs: torch.Tensor,
+    ) -> torch.Tensor:
         x = inputs
 
         if self._batch_norms is not None:
@@ -285,31 +322,21 @@ class GAT(nn.Module):
 
     def forward(
         self,
-        g: Union[dgl.DGLGraph, tuple[dgl.DGLGraph]],
+        g: Union[dgl.DGLGraph, list[dgl.DGLGraph]],
+        node_inputs: torch.Tensor,
+        edge_inputs: torch.Tensor = None,
     ) -> torch.Tensor:
+        x = self._input_dropout(node_inputs)
+
         if isinstance(g, list):
-            x = self._input_dropout(g[0].srcdata['feat'])
-
             for i, (block, layer) in enumerate(zip(g, self._layers)):
-                if self._edge_in_feats > 0:
-                    efeat = block.edata['feat']
-                else:
-                    efeat = None
-
-                x = layer(block, x, efeat).flatten(1, -1)
+                x = layer(block, x, edge_inputs).flatten(1, -1)
 
                 if i < self._num_layers - 1:
                     x = self._apply_layers(i, x)
         else:
-            x = self._input_dropout(g.srcdata['feat'])
-
             for i, layer in enumerate(self._layers):
-                if self._edge_in_feats > 0:
-                    efeat = g.edata['feat']
-                else:
-                    efeat = None
-
-                x = layer(g, x, efeat).flatten(1, -1)
+                x = layer(g, x, edge_inputs).flatten(1, -1)
 
                 if i < self._num_layers - 1:
                     x = self._apply_layers(i, x)
@@ -335,9 +362,11 @@ def train_mini_batch(
         optimizer.zero_grad()
 
         blocks = [block.int().to(device) for block in blocks]
+
+        inputs = blocks[0].srcdata['feat']
         labels = blocks[-1].dstdata['label']
 
-        logits = model(blocks)
+        logits = model(blocks, inputs)
         loss = loss_function(logits, labels)
 
         loss.backward()
@@ -366,6 +395,7 @@ def train_full_graph(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
+    inputs = g.ndata['feat']
     labels = g.ndata['label']
 
     model.train()
@@ -373,7 +403,7 @@ def train_full_graph(
 
     start = default_timer()
 
-    logits = model(g)
+    logits = model(g, inputs)
     loss = loss_function(logits[mask], labels[mask])
 
     loss.backward()
@@ -397,6 +427,7 @@ def validate(
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
+    inputs = g.ndata['feat']
     labels = g.ndata['label']
 
     model.eval()
@@ -404,7 +435,7 @@ def validate(
     start = default_timer()
 
     with torch.no_grad():
-        logits = model(g)
+        logits = model(g, inputs)
         loss = loss_function(logits[mask], labels[mask])
 
         _, indices = torch.max(logits[mask], dim=1)

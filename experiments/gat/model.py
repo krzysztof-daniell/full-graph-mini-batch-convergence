@@ -1,11 +1,9 @@
 from collections.abc import Callable
-from timeit import default_timer
 from typing import Union
 
 import dgl
 import dgl.function as fn
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
 from dgl.ops import edge_softmax
 from dgl.utils import expand_as_pair
@@ -221,8 +219,7 @@ class GAT(nn.Module):
         self,
         node_in_feats: int,
         edge_in_feats: int,
-        node_hidden_feats: int,
-        edge_hidden_feats: int,
+        hidden_feats: int,
         out_feats: int,
         num_heads: int,
         num_layers: int,
@@ -240,6 +237,7 @@ class GAT(nn.Module):
         bias: bool = True,
     ):
         super().__init__()
+        self._edge_in_feats = edge_in_feats
         self._num_heads = num_heads
         self._num_layers = num_layers
         self._input_dropout = nn.Dropout(input_dropout)
@@ -247,32 +245,28 @@ class GAT(nn.Module):
         self._residual = residual
         self._activation = activation
 
-        self._node_encoder = nn.Linear(node_in_feats, node_hidden_feats)
+        self._layers = nn.ModuleList()
 
-        if edge_hidden_feats > 0:
-            self._edge_encoder = nn.ModuleList()
-        else:
-            self._edge_encoder = None
+        self._layers.append(GATConv(
+            node_in_feats,
+            edge_in_feats,
+            hidden_feats,
+            num_heads,
+            norm=norm,
+            attn_dropout=attn_dropout,
+            edge_dropout=edge_dropout,
+            negative_slope=negative_slope,
+            residual=residual,
+            use_attn_dst=use_attn_dst,
+            allow_zero_in_degree=allow_zero_in_degree,
+            bias=bias,
+        ))
 
-        self._convs = nn.ModuleList()
-
-        if batch_norm:
-            self._batch_norms = nn.ModuleList()
-        else:
-            self._batch_norms = None
-
-        for i in range(num_layers):
-            in_hidden = num_heads * node_hidden_feats if i > 0 else node_hidden_feats
-            out_hidden = node_hidden_feats
-
-            if self._edge_encoder is not None:
-                self._edge_encoder.append(
-                    nn.Linear(edge_in_feats, edge_hidden_feats))
-
-            self._convs.append(GATConv(
-                in_hidden,
-                edge_hidden_feats,
-                out_hidden,
+        for _ in range(1, num_layers - 1):
+            self._layers.append(GATConv(
+                num_heads * hidden_feats,
+                edge_in_feats,
+                hidden_feats,
                 num_heads,
                 norm=norm,
                 attn_dropout=attn_dropout,
@@ -284,12 +278,29 @@ class GAT(nn.Module):
                 bias=bias,
             ))
 
-            if batch_norm:
-                self._batch_norms.append(nn.BatchNorm1d(
-                    num_heads * out_hidden))
+        self._layers.append(GATConv(
+            num_heads * hidden_feats,
+            edge_in_feats,
+            out_feats,
+            num_heads,
+            norm=norm,
+            attn_dropout=attn_dropout,
+            edge_dropout=edge_dropout,
+            negative_slope=negative_slope,
+            residual=residual,
+            use_attn_dst=use_attn_dst,
+            allow_zero_in_degree=allow_zero_in_degree,
+            bias=bias,
+        ))
 
-        self._fc_prediction = nn.Linear(
-            num_heads * node_hidden_feats, out_feats)
+        if batch_norm:
+            self._batch_norms = nn.ModuleList()
+
+            for _ in range(num_layers - 1):
+                self._batch_norms.append(nn.BatchNorm1d(
+                    num_heads * hidden_feats))
+        else:
+            self._batch_norms = None
 
     def _apply_layers(
         self,
@@ -310,152 +321,23 @@ class GAT(nn.Module):
 
     def forward(
         self,
-        g: Union[dgl.DGLGraph, tuple[dgl.DGLGraph]],
+        g: Union[dgl.DGLGraph, list[dgl.DGLGraph]],
         node_inputs: torch.Tensor,
         edge_inputs: torch.Tensor = None,
     ) -> torch.Tensor:
-        x = self._node_encoder(node_inputs)
-
-        if self._activation is not None:
-            x = self._activation(x)
-        else:
-            x = F.relu(x, inplace=True)
-
-        x = self._input_dropout(x)
+        x = self._input_dropout(node_inputs)
 
         if isinstance(g, list):
-            for i in range(self._num_layers):
-                if self._edge_encoder is not None:
-                    efeat = g[i].edata['feat']
+            for i, (block, layer) in enumerate(zip(g, self._layers)):
+                x = layer(block, x, edge_inputs).flatten(1, -1)
 
-                    efeat_embedding = self._edge_encoder[i](efeat)
-
-                    if self._activation is not None:
-                        efeat_embedding = self._activation(efeat_embedding)
-                    else:
-                        efeat_embedding = F.relu(efeat_embedding, inplace=True)
-                else:
-                    efeat_embedding = None
-
-                x = self._convs[i](g[i], x, efeat_embedding).flatten(1, -1)
-                x = self._apply_layers(i, x)
+                if i < self._num_layers - 1:
+                    x = self._apply_layers(i, x)
         else:
-            for i in range(self._num_layers):
-                if self._edge_encoder is not None:
-                    efeat = g.edata['feat']
+            for i, layer in enumerate(self._layers):
+                x = layer(g, x, edge_inputs).flatten(1, -1)
 
-                    efeat_embedding = self._edge_encoder[i](efeat)
-                    efeat_embedding = F.relu(efeat_embedding, inplace=True)
-                else:
-                    efeat_embedding = None
-
-                x = self._convs[i](g, x, efeat_embedding).flatten(1, -1)
-                x = self._apply_layers(i, x)
-
-        x = self._fc_prediction(x)
+                if i < self._num_layers - 1:
+                    x = self._apply_layers(i, x)
 
         return x
-
-
-def train_mini_batch(
-    model: nn.Module,
-    device: Union[str, torch.device],
-    optimizer: torch.optim.Optimizer,
-    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    dataloader: dgl.dataloading.NodeDataLoader,
-) -> tuple[float]:
-    model.train()
-
-    total_loss = 0
-    total_accuracy = 0
-
-    start = default_timer()
-
-    for step, (_, _, blocks) in enumerate(dataloader):
-        optimizer.zero_grad()
-
-        blocks = [block.int().to(device) for block in blocks]
-
-        inputs = blocks[0].srcdata['feat']
-        labels = blocks[-1].dstdata['label']
-
-        logits = model(blocks, inputs)
-        loss = loss_function(logits, labels)
-
-        loss.backward()
-        optimizer.step()
-
-        _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == labels)
-        accuracy = correct.item() / len(labels)
-
-        total_loss += loss.item()
-        total_accuracy += accuracy
-
-    stop = default_timer()
-    time = stop - start
-
-    total_loss /= step + 1
-    total_accuracy /= step + 1
-
-    return time, total_loss, total_accuracy
-
-
-def train_full_graph(
-    model: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    g: dgl.DGLGraph,
-    mask: torch.Tensor,
-) -> tuple[float]:
-    inputs = g.ndata['feat']
-    labels = g.ndata['label']
-
-    model.train()
-    optimizer.zero_grad()
-
-    start = default_timer()
-
-    logits = model(g, inputs)
-    loss = loss_function(logits[mask], labels[mask])
-
-    loss.backward()
-    optimizer.step()
-
-    loss = loss.item()
-
-    _, indices = torch.max(logits[mask], dim=1)
-    correct = torch.sum(indices == labels[mask])
-    accuracy = correct.item() / len(labels[mask])
-
-    stop = default_timer()
-    time = stop - start
-
-    return time, loss, accuracy
-
-
-def validate(
-    model: nn.Module,
-    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    g: dgl.DGLGraph,
-    mask: torch.Tensor,
-) -> tuple[float]:
-    inputs = g.ndata['feat']
-    labels = g.ndata['label']
-
-    model.eval()
-
-    start = default_timer()
-
-    with torch.no_grad():
-        logits = model(g, inputs)
-        loss = loss_function(logits[mask], labels[mask])
-
-        _, indices = torch.max(logits[mask], dim=1)
-        correct = torch.sum(indices == labels[mask])
-        accuracy = correct.item() / len(labels[mask])
-
-    stop = default_timer()
-    time = stop - start
-
-    return time, loss, accuracy
