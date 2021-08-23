@@ -1,0 +1,20 @@
+# test on t3.large
+resources:
+  requests:
+    cpu: 1.65
+    memory: 6.5Gi
+  limits:
+    cpu: 1.8
+    memory: 6.7Gi
+
+# m5.24xlarge - 96VCPUs, 384 GiB, $4.13/hr
+# resources:
+#   requests:
+#     cpu: 80
+#     memory: 350Gi
+#   limits:
+#     cpu: 88
+#     memory: 360Gi
+name: RGCN OGB-products full graph 
+run: python full_graph.py --download-dataset --num-epochs 3
+image: rgcn-ogb-products-full-graph

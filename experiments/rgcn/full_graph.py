@@ -84,7 +84,7 @@ def run(args: argparse.ArgumentParser) -> None:
 
     dataset, hg, train_idx, valid_idx, test_idx = process_dataset(
         args.dataset,
-        root='/home/ksadowski/datasets',
+        root=args.dataset_root,
     )
     predict_category = dataset.predict_category
     labels = hg.nodes[predict_category].data['labels']
@@ -94,19 +94,19 @@ def run(args: argparse.ArgumentParser) -> None:
     norms = {'both': 0, 'none': 1, 'right': 2}
     activations = {'leaky_relu': 0, 'relu': 1}
 
-    sigopt.params.setdefaults({
-        'embedding_lr': args.embedding_lr,
-        'model_lr': args.model_lr,
-        'hidden_feats': args.hidden_feats,
-        'num_bases': args.num_bases,
-        'num_layers': args.num_layers,
-        'norm': norms[args.norm],
-        'batch_norm': int(args.batch_norm),
-        'activation': activations[args.activation],
-        'input_dropout': args.input_dropout,
-        'dropout': args.dropout,
-        'self_loop': args.self_loop,
-    })
+    # sigopt.params.setdefaults({
+    #     'embedding_lr': args.embedding_lr,
+    #     'model_lr': args.model_lr,
+    #     'hidden_feats': args.hidden_feats,
+    #     'num_bases': args.num_bases,
+    #     'num_layers': args.num_layers,
+    #     'norm': norms[args.norm],
+    #     'batch_norm': str(args.batch_norm),
+    #     'activation': activations[args.activation],
+    #     'input_dropout': args.input_dropout,
+    #     'dropout': args.dropout,
+    #     'self_loop': str(args.self_loop),
+    # })
 
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
@@ -130,23 +130,25 @@ def run(args: argparse.ArgumentParser) -> None:
     model = EntityClassify(
         hg,
         in_feats,
-        sigopt.params.hidden_feats,
+        12,#sigopt.params.hidden_feats,
         out_feats,
-        sigopt.params.num_bases,
-        sigopt.params.num_layers,
-        norm=norms[f'{sigopt.params.norm}'],
-        batch_norm=bool(sigopt.params.batch_norm),
-        input_dropout=sigopt.params.input_dropout,
-        dropout=sigopt.params.dropout,
-        activation=activations[f'{sigopt.params.activation}'],
-        self_loop=sigopt.params.self_loop,
+        3, #sigopt.params.num_bases,
+        3, #sigopt.params.num_layers,
+        norm="none",#norms[f'{sigopt.params.norm}'],
+        batch_norm=False, #bool(sigopt.params.batch_norm),
+        input_dropout=.1,#sigopt.params.input_dropout,
+        dropout=.5,#sigopt.params.dropout,
+        activation=F.leaky_relu, #activations[f'{sigopt.params.activation}'],
+        self_loop=True#bool(sigopt.params.self_loop),
     )
 
-    loss_function = nn.CrossEntropyLoss().to(device)
+    loss_function = nn.CrossEntropyLoss( ).to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
+        # embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
+         embedding_layer.node_embeddings.parameters()), lr=.01)
     model_optimizer = torch.optim.Adam(
-        model.parameters(), lr=sigopt.params.model_lr)
+        # model.parameters(), lr=sigopt.params.model_lr)
+        model.parameters(), lr=.01)
 
     checkpoint = Callback(args.early_stopping_patience,
                           args.early_stopping_monitor)
@@ -218,16 +220,17 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        log_metrics_to_sigopt(
-            checkpoint,
-            'RGCN',
-            args.dataset,
-            test_loss,
-            test_accuracy,
-            test_time,
-        )
+        # log_metrics_to_sigopt(
+        #     checkpoint,
+        #     'RGCN',
+        #     args.dataset,
+        #     test_loss,
+        #     test_accuracy,
+        #     test_time,
+        # )
     else:
-        log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
+        pass 
+    #log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
 
 
 if __name__ == '__main__':
@@ -235,6 +238,7 @@ if __name__ == '__main__':
 
     argparser.add_argument('--dataset', default='ogbn-mag', type=str,
                            choices=['ogbn-mag'])
+    argparser.add_argument('--dataset_root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)

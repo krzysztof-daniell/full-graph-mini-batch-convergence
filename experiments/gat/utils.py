@@ -103,12 +103,12 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        sigopt.log_checkpoint({
-            'train loss': train_loss,
-            'valid loss': valid_loss,
-            'train accuracy': train_accuracy,
-            'valid accuracy': valid_accuracy,
-        })
+        # sigopt.log_checkpoint({
+        #     'train loss': train_loss,
+        #     'valid loss': valid_loss,
+        #     'train accuracy': train_accuracy,
+        #     'valid accuracy': valid_accuracy,
+        # })
 
         best_epoch = False
 

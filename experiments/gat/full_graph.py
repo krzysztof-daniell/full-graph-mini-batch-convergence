@@ -85,15 +85,12 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    norms = {'both': 0, 'left': 1, 'none': 2, 'right': 3}
-    activations = {'leaky_relu': 0, 'relu': 1}
-
     sigopt.params.setdefaults({
         'lr': args.lr,
         'hidden_feats': args.hidden_feats,
         'num_heads': args.num_heads,
         'num_layers': args.num_layers,
-        'norm': norms[args.norm],
+        'norm': args.norm,
         'batch_norm': int(args.batch_norm),
         'input_dropout': args.input_dropout,
         'attn_dropout': args.attn_dropout,
@@ -101,7 +98,7 @@ def run(args: argparse.ArgumentParser) -> None:
         'dropout': args.dropout,
         'negative_slope': args.negative_slope,
         'residual': int(args.residual),
-        'activation': activations[args.activation],
+        'activation': args.activation,
         'use_attn_dst': int(args.use_attn_dst),
         'bias': int(args.bias),
     })
@@ -110,8 +107,8 @@ def run(args: argparse.ArgumentParser) -> None:
     edge_in_feats = 0
     out_feats = dataset.num_classes
 
-    norms = {'0': 'both', '1': 'left', '2': 'none', '3': 'right'}
-    activations = {'0': F.leaky_relu, '1': F.relu}
+    #norms = {'both': 'both', '1': 'left', '2': 'none', '3': 'right'}
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
     model = GAT(
         node_in_feats,
@@ -120,7 +117,7 @@ def run(args: argparse.ArgumentParser) -> None:
         out_feats,
         sigopt.params.num_heads,
         sigopt.params.num_layers,
-        norm=norms[f'{sigopt.params.norm}'],
+        norm=sigopt.params.norm,
         batch_norm=bool(sigopt.params.batch_norm),
         input_dropout=sigopt.params.input_dropout,
         attn_dropout=sigopt.params.attn_dropout,
@@ -128,7 +125,7 @@ def run(args: argparse.ArgumentParser) -> None:
         dropout=sigopt.params.dropout,
         negative_slope=sigopt.params.negative_slope,
         residual=bool(sigopt.params.residual),
-        activation=activations[f'{sigopt.params.activation}'],
+        activation=sigopt.params.activation,
         use_attn_dst=bool(sigopt.params.use_attn_dst),
         bias=bool(sigopt.params.bias),
     ).to(device)
@@ -168,7 +165,6 @@ def run(args: argparse.ArgumentParser) -> None:
 
         if checkpoint.should_stop:
             print('!! Early Stopping !!')
-
             break
 
     if args.test_validation:
@@ -183,21 +179,20 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        log_metrics_to_sigopt(
-            checkpoint,
-            'GAT',
-            args.dataset,
-            test_loss,
-            test_accuracy,
-            test_time,
-        )
+        # log_metrics_to_sigopt(
+        #     checkpoint,
+        #     'GAT',
+        #     args.dataset,
+        #     test_loss,
+        #     test_accuracy,
+        #     test_time,
+        # )
     else:
         log_metrics_to_sigopt(checkpoint, 'GAT', args.dataset)
 
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GAT Optimization')
-
     argparser.add_argument('--dataset', default='ogbn-products', type=str,
                            choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
     argparser.add_argument('--download-dataset', default=False,

@@ -6,7 +6,6 @@ import dgl.nn.pytorch as dglnn
 import torch
 import torch.nn as nn
 
-
 class GraphSAGE(nn.Module):
     def __init__(
         self,
