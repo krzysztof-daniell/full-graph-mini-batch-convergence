@@ -3,12 +3,13 @@ import shutil
 from typing import Union
 
 import dgl
+import dgl.function as fn
 import matplotlib.pyplot as plt
 import numpy as np
 import sigopt
 import torch
 import torch.nn as nn
-from ogb.nodeproppred import DglNodePropPredDataset
+from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
 
 
 class Callback:
@@ -259,10 +260,17 @@ def load_ogbn_homogeneous(name: str, root: str = None) -> OGBDataset:
     g, labels = dataset[0]
 
     labels = labels.squeeze()
-    num_labels = len(torch.unique(
-        labels[torch.logical_not(torch.isnan(labels))]))
 
-    g.ndata['label'] = labels
+    if name == 'ogbn-proteins':
+        g.update_all(fn.copy_e('feat', 'feat_copy'),
+                     fn.sum('feat_copy', 'feat'))
+
+        g.ndata['label'] = labels.float()
+        num_labels = labels.shape[-1]
+    else:
+        g.ndata['label'] = labels
+        num_labels = len(torch.unique(
+            g.ndata['label'][torch.logical_not(torch.isnan(labels))]))
 
     train_mask = torch.zeros((g.num_nodes(),), dtype=torch.bool)
     train_mask[train_idx] = True
@@ -339,6 +347,7 @@ def process_dataset(
     elif name == 'ogbn-mag':
         dataset = load_ogbn_mag(root=root)
 
+    evaluator = Evaluator(name)
     g = dataset[0]
 
     if reverse_edges:
@@ -363,7 +372,7 @@ def process_dataset(
         test_idx = torch.nonzero(
             g.nodes[predict_category].data['test_mask'], as_tuple=True)[0]
 
-    return dataset, g, train_idx, valid_idx, test_idx
+    return dataset, evaluator, g, train_idx, valid_idx, test_idx
 
 
 def set_sigopt_fanouts(fanouts: str) -> list[int]:
@@ -378,3 +387,23 @@ def set_sigopt_fanouts(fanouts: str) -> list[int]:
         result.append(sigopt.params[f'layer_{i + 1}_fanout'])
 
     return result
+
+
+def get_evaluation_score(
+    evaluator: Evaluator,
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+) -> float:
+    if labels.dim() > 1:
+        y_pred = logits
+        y_true = labels
+    else:
+        y_pred = logits.argmax(dim=-1, keepdim=True)
+        y_true = labels.unsqueeze(dim=-1)
+
+    _, score = evaluator.eval({
+        'y_pred': y_pred,
+        'y_true': y_true,
+    }).popitem()
+
+    return score

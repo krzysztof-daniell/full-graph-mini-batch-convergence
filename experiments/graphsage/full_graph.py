@@ -7,6 +7,7 @@ import sigopt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ogb.nodeproppred import Evaluator
 
 import utils
 from model import GraphSAGE
@@ -16,66 +17,64 @@ def train(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    inputs = g.ndata['feat']
-    labels = g.ndata['label']
-
     model.train()
     optimizer.zero_grad()
 
     start = default_timer()
 
-    logits = model(g, inputs)
-    loss = loss_function(logits[mask], labels[mask])
+    inputs = g.ndata['feat']
+    labels = g.ndata['label'][mask]
+
+    logits = model(g, inputs)[mask]
+
+    loss = loss_function(logits, labels)
+    score = utils.get_evaluation_score(evaluator, logits, labels)
 
     loss.backward()
     optimizer.step()
 
     loss = loss.item()
 
-    _, indices = torch.max(logits[mask], dim=1)
-    correct = torch.sum(indices == labels[mask])
-    accuracy = correct.item() / len(labels[mask])
-
     stop = default_timer()
     time = stop - start
 
-    return time, loss, accuracy
+    return time, loss, score
 
 
 def validate(
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    inputs = g.ndata['feat']
-    labels = g.ndata['label']
-
     model.eval()
 
     start = default_timer()
 
-    with torch.no_grad():
-        logits = model(g, inputs)
-        loss = loss_function(logits[mask], labels[mask])
+    inputs = g.ndata['feat']
+    labels = g.ndata['label'][mask]
 
-        _, indices = torch.max(logits[mask], dim=1)
-        correct = torch.sum(indices == labels[mask])
-        accuracy = correct.item() / len(labels[mask])
+    with torch.no_grad():
+        logits = model(g, inputs)[mask]
+
+        loss = loss_function(logits, labels)
+        score = utils.get_evaluation_score(evaluator, logits, labels)
 
     stop = default_timer()
     time = stop - start
 
-    return time, loss, accuracy
+    return time, loss, score
 
 
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, g, train_idx, valid_idx, test_idx = utils.process_dataset(
+    dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
         reverse_edges=args.graph_reverse_edges,
@@ -131,7 +130,11 @@ def run(args: argparse.ArgumentParser) -> None:
     #     sigopt.params.dropout * 0.05,  # int range(0, 19)
     # ).to(device)
 
-    loss_function = nn.CrossEntropyLoss().to(device)
+    if args.dataset == 'ogbn-proteins':
+        loss_function = nn.BCEWithLogitsLoss().to(device)
+    else:
+        loss_function = nn.CrossEntropyLoss().to(device)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
@@ -139,10 +142,10 @@ def run(args: argparse.ArgumentParser) -> None:
                                 args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
-        train_time, train_loss, train_accuracy = train(
-            model, optimizer, loss_function, g, train_idx)
-        valid_time, valid_loss, valid_accuracy = validate(
-            model, loss_function, g, valid_idx)
+        train_time, train_loss, train_score = train(
+            model, optimizer, loss_function, evaluator, g, train_idx)
+        valid_time, valid_loss, valid_score = validate(
+            model, loss_function, evaluator, g, valid_idx)
 
         checkpoint.create(
             epoch,
@@ -150,8 +153,8 @@ def run(args: argparse.ArgumentParser) -> None:
             valid_time,
             train_loss,
             valid_loss,
-            train_accuracy,
-            valid_accuracy,
+            train_score,
+            valid_score,
             model,
         )
 
@@ -159,8 +162,8 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Epoch: {epoch + 1:03} '
             f'Train Loss: {train_loss:.2f} '
             f'Valid Loss: {valid_loss:.2f} '
-            f'Train Accuracy: {train_accuracy * 100:.2f} % '
-            f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
+            f'Train Score: {train_score:.4f} '
+            f'Valid Score: {valid_score:.4f} '
             f'Train Epoch Time: {train_time:.2f} '
             f'Valid Epoch Time: {valid_loss:.2f}'
         )
@@ -173,12 +176,12 @@ def run(args: argparse.ArgumentParser) -> None:
     if args.test_validation:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
-        test_time, test_loss, test_accuracy = validate(
-            model, loss_function, g, test_idx)
+        test_time, test_loss, test_score = validate(
+            model, loss_function, evaluator, g, test_idx)
 
         print(
             f'Test Loss: {test_loss:.2f} '
-            f'Test Accuracy: {test_accuracy * 100:.2f} % '
+            f'Test Score: {test_score:.4f} '
             f'Test Epoch Time: {test_time:.2f}'
         )
 
@@ -187,7 +190,7 @@ def run(args: argparse.ArgumentParser) -> None:
             'GraphSAGE',
             args.dataset,
             test_loss,
-            test_accuracy,
+            test_score,
             test_time,
         )
     else:
