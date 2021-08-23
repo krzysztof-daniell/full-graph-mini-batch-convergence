@@ -1,0 +1,84 @@
+# full_graph_experiment.yml
+name: POC - rgcn mini batch 
+parameters: 
+  - name: model_lr
+    type: double
+    transformation: log
+    bounds:
+      min: 0.00001
+      max: 0.01
+  - name: embedding_lr
+    type: double
+    transformation: log
+    bounds:
+      min: 0.00001
+      max: 0.01
+  - name: hidden_feats
+    type: int
+    grid: [8, 16, 32, 64, 128, 256]
+  - name: num_bases
+    type: int
+    bounds:
+      min: 2
+      max: 4
+  - name: num_layers
+    type: int
+    bounds:
+      min: 1
+      max: 4
+  - name: norm
+    type: categorical
+    categorical_values: [both, none, right]
+  - name: batch_norm
+    type: categorical
+    categorical_values: [True, False]
+  - name: activation 
+    type: categorical
+    categorical_values: [leaky_relu, relu]
+  - name: input_dropout
+    type: double
+    bounds: 
+      min: 0.0
+      max: 0.3
+  - name: dropout
+    type: double
+    bounds:
+      min: 0.01
+      max: 0.7
+    prior:
+      name: beta
+      shape_a: 2
+      shape_b: 3
+  - name: self_loop
+    type: categorical
+    categorical_values: [True, False]
+  - name: batch_size
+    type: int
+    grid: [50, 100, 250, 500, 750, 1000]
+metrics:
+  - name: best epoch 
+    strategy: store
+    objective: minimize
+  - name: best epoch - train loss
+    strategy: store
+    objective: minimize
+  - name: best epoch - train accuracy
+    strategy: store
+    objective: maximize
+  - name: best epoch - valid loss
+    strategy: optimize
+    objective: minimize
+  - name: best epoch - valid accuracy
+    strategy: store
+    objective: maximize
+  - name: best epoch - training time
+    strategy: store
+    objective: minimize
+  - name: avg train epoch time
+    strategy: store
+    objective: minimize
+  - name: avg valid epoch time
+    strategy: store
+    objective: minimize
+budget: 50
+parallel_bandwidth: 3
