@@ -85,41 +85,43 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    aggregator_types = {'gcn': 0, 'mean': 1}
-    activations = {'leaky_relu': 0, 'relu': 1}
-
-    # sigopt.params.setdefaults({
-    #     'lr': args.lr,
-    #     'hidden_feats': args.hidden_feats,
-    #     'num_layers': args.num_layers,
-    #     'aggregator_type': aggregator_types[args.aggregator_type],
-    #     'batch_norm': str(args.batch_norm),
-    #     'activation': activations[args.activation],
-    #     'input_dropout': args.input_dropout,
-    #     'dropout': args.dropout,
-    # })
+    sigopt.params.setdefaults({
+        'lr': args.lr,
+        'hidden_feats': args.hidden_feats,
+        'num_layers': args.num_layers,
+        'aggregator_type': args.aggregator_type,
+        'batch_norm': str(args.batch_norm),
+        'activation': args.activation,
+        'input_dropout': args.input_dropout,
+        'dropout': args.dropout,
+    })
 
     in_feats = g.ndata['feat'].shape[-1]
     out_feats = dataset.num_classes
 
-    aggregator_types = {'0': 'gcn', '1': 'mean'}
-    activations = {'0': F.leaky_relu, '1': F.relu}
+
+    # aggregator_types = {'gcn': 0, 'mean': 1}
+    # activations = {'leaky_relu': 0, 'relu': 1}
+    aggregator_types = {'gcn': 'gcn', 'mean': 'mean'}
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
     model = GraphSAGE(
         in_feats,
-        12,#sigopt.params.hidden_feats,
+        sigopt.params.hidden_feats,
+        #12,
         out_feats,
-        2, #sigopt.params.num_layers,
-        #aggregator_type=aggregator_types[f'{sigopt.params.aggregator_type}'],
-        aggregator_type="mean", 
-        #batch_norm=bool(sigopt.params.batch_norm),
-        batch_norm=True,
-        # input_dropout=sigopt.params.input_dropout,
-        input_dropout=.1,
-        #dropout=sigopt.params.dropout,
-        dropout=.5,
-        #activation=activations[f'{sigopt.params.activation}'],
-        activation=F.leaky_relu
+        sigopt.params.num_layers,
+        # 2, 
+        aggregator_type=aggregator_types[sigopt.params.aggregator_type],
+        # aggregator_type="mean", 
+        batch_norm=bool(sigopt.params.batch_norm),
+        # batch_norm=True,
+        input_dropout=sigopt.params.input_dropout,
+        # input_dropout=.1,
+        dropout=sigopt.params.dropout,
+        # dropout=.5,
+        activation=activations[sigopt.params.activation],
+        # activation=F.leaky_relu
     ).to(device)
 
     # model = GraphSAGE(
@@ -135,8 +137,8 @@ def run(args: argparse.ArgumentParser) -> None:
     # ).to(device)
 
     loss_function = nn.CrossEntropyLoss().to(device)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     checkpoint = Callback(args.early_stopping_patience,
                           args.early_stopping_monitor)
@@ -147,16 +149,16 @@ def run(args: argparse.ArgumentParser) -> None:
         valid_time, valid_loss, valid_accuracy = validate(
             model, loss_function, g, valid_idx)
 
-        # checkpoint.create(
-        #     epoch,
-        #     train_time,
-        #     valid_time,
-        #     train_loss,
-        #     valid_loss,
-        #     train_accuracy,
-        #     valid_accuracy,
-        #     model,
-        # )
+        checkpoint.create(
+            epoch,
+            train_time,
+            valid_time,
+            train_loss,
+            valid_loss,
+            train_accuracy,
+            valid_accuracy,
+            model,
+        )
 
         print(
             f'Epoch: {epoch + 1:03} '
@@ -185,17 +187,16 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        # log_metrics_to_sigopt(
-        #     checkpoint,
-        #     'GraphSAGE',
-        #     args.dataset,
-        #     test_loss,
-        #     test_accuracy,
-        #     test_time,
-        # )
+        log_metrics_to_sigopt(
+            checkpoint,
+            'GraphSAGE',
+            args.dataset,
+            test_loss,
+            test_accuracy,
+            test_time,
+        )
     else:
-        #log_metrics_to_sigopt(checkpoint, 'GraphSAGE', args.dataset)
-        pass
+        log_metrics_to_sigopt(checkpoint, 'GraphSAGE', args.dataset)
 
 
 if __name__ == '__main__':

@@ -114,9 +114,9 @@ def run(args: argparse.ArgumentParser) -> None:
     #     'hidden_feats': args.hidden_feats,
     #     'num_bases': args.num_bases,
     #     'num_layers': args.num_layers,
-    #     'norm': norms[args.norm],
+    #     'norm': args.norm,
     #     'batch_norm': int(args.batch_norm),
-    #     'activation': activations[args.activation],
+    #     'activation': args.activation,
     #     'input_dropout': args.input_dropout,
     #     'dropout': args.dropout,
     #     'self_loop': args.self_loop,
@@ -153,8 +153,8 @@ def run(args: argparse.ArgumentParser) -> None:
         num_nodes[ntype] = hg.num_nodes(ntype)
         node_feats[ntype] = hg.nodes[ntype].data.get('feat')
 
-    norms = {'0': 'both', '1': 'none', '2': 'right'}
-    activations = {'0': F.leaky_relu, '1': F.relu}
+    # norms = {'0': 'both', '1': 'none', '2': 'right'}
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
     embedding_layer = RelGraphEmbedding(
         hg,

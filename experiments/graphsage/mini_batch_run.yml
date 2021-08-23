@@ -15,6 +15,6 @@ resources:
 #   limits:
 #     cpu: 88
 #     memory: 360Gi
-name: GraphSage mini batch ogb-products
-run: python full_batch.py --download-dataset 1
+name: GraphSage ogb-products mini batch 
+run: python mini_batch.py --download-dataset
 image: graphsage-ogb-products-mini-batch
