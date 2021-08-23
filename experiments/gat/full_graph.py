@@ -8,9 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import utils
 from model import GAT
-from utils import (Callback, download_dataset, log_metrics_to_sigopt,
-                   process_dataset)
 
 
 def train(
@@ -76,7 +75,7 @@ def validate(
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, g, train_idx, valid_idx, test_idx = process_dataset(
+    dataset, g, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root='/home/ksadowski/datasets',
         reverse_edges=args.graph_reverse_edges,
@@ -133,8 +132,8 @@ def run(args: argparse.ArgumentParser) -> None:
     loss_function = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
 
-    checkpoint = Callback(args.early_stopping_patience,
-                          args.early_stopping_monitor)
+    checkpoint = utils.Callback(args.early_stopping_patience,
+                                args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
@@ -188,7 +187,7 @@ def run(args: argparse.ArgumentParser) -> None:
         #     test_time,
         # )
     else:
-        log_metrics_to_sigopt(checkpoint, 'GAT', args.dataset)
+        utils.log_metrics_to_sigopt(checkpoint, 'GAT', args.dataset)
 
 
 if __name__ == '__main__':
@@ -233,6 +232,6 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     if args.download_dataset:
-        download_dataset(args.dataset)
+        utils.download_dataset(args.dataset)
 
     run(args)

@@ -8,9 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import utils
 from model import EntityClassify, RelGraphEmbedding
-from utils import (Callback, download_dataset, log_metrics_to_sigopt,
-                   process_dataset)
 
 
 def train(
@@ -82,7 +81,7 @@ def validate(
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, hg, train_idx, valid_idx, test_idx = process_dataset(
+    dataset, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
     )
@@ -130,28 +129,28 @@ def run(args: argparse.ArgumentParser) -> None:
     model = EntityClassify(
         hg,
         in_feats,
-        12,#sigopt.params.hidden_feats,
+        12,  # sigopt.params.hidden_feats,
         out_feats,
-        3, #sigopt.params.num_bases,
-        3, #sigopt.params.num_layers,
-        norm="none",#norms[f'{sigopt.params.norm}'],
-        batch_norm=False, #bool(sigopt.params.batch_norm),
-        input_dropout=.1,#sigopt.params.input_dropout,
-        dropout=.5,#sigopt.params.dropout,
-        activation=F.leaky_relu, #activations[f'{sigopt.params.activation}'],
-        self_loop=True#bool(sigopt.params.self_loop),
+        3,  # sigopt.params.num_bases,
+        3,  # sigopt.params.num_layers,
+        norm="none",  # norms[f'{sigopt.params.norm}'],
+        batch_norm=False,  # bool(sigopt.params.batch_norm),
+        input_dropout=.1,  # sigopt.params.input_dropout,
+        dropout=.5,  # sigopt.params.dropout,
+        activation=F.leaky_relu,  # activations[f'{sigopt.params.activation}'],
+        self_loop=True  # bool(sigopt.params.self_loop),
     )
 
-    loss_function = nn.CrossEntropyLoss( ).to(device)
+    loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
         # embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
-         embedding_layer.node_embeddings.parameters()), lr=.01)
+        embedding_layer.node_embeddings.parameters()), lr=.01)
     model_optimizer = torch.optim.Adam(
         # model.parameters(), lr=sigopt.params.model_lr)
         model.parameters(), lr=.01)
 
-    checkpoint = Callback(args.early_stopping_patience,
-                          args.early_stopping_monitor)
+    checkpoint = utils.Callback(args.early_stopping_patience,
+                                args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
@@ -220,7 +219,7 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        # log_metrics_to_sigopt(
+        # utils.log_metrics_to_sigopt(
         #     checkpoint,
         #     'RGCN',
         #     args.dataset,
@@ -229,8 +228,8 @@ def run(args: argparse.ArgumentParser) -> None:
         #     test_time,
         # )
     else:
-        pass 
-    #log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
+        pass
+    #utils.log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
 
 
 if __name__ == '__main__':
@@ -267,6 +266,6 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     if args.download_dataset:
-        download_dataset(args.dataset)
+        utils.download_dataset(args.dataset)
 
     run(args)

@@ -9,9 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import utils
 from model import GraphSAGE
-from utils import (Callback, download_dataset, log_metrics_to_sigopt,
-                   process_dataset)
 
 
 def train(
@@ -88,7 +87,7 @@ def validate(
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, g, train_idx, valid_idx, test_idx = process_dataset(
+    dataset, g, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
         reverse_edges=args.graph_reverse_edges,
@@ -109,14 +108,7 @@ def run(args: argparse.ArgumentParser) -> None:
         'batch_size': args.batch_size,
     })
 
-    fanouts = [int(i) for i in args.fanouts.split(',')]
-    for i in reversed(range(len(fanouts))):
-        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': fanouts[i]})
-
-        fanouts.pop(i)
-
-    for i in range(sigopt.params.num_layers):
-        fanouts.append(sigopt.params[f'layer_{i + 1}_fanout'])
+    fanouts = utils.set_sigopt_fanouts(args.fanouts)
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
@@ -147,14 +139,14 @@ def run(args: argparse.ArgumentParser) -> None:
     model = GraphSAGE(
         in_feats,
         sigopt.params.hidden_feats,
-        #12,
+        # 12,
         out_feats,
         sigopt.params.num_layers,
-        #3,
+        # 3,
         aggregator_type=sigopt.params.aggregator_type,
-        #aggregator_type="mean",
+        # aggregator_type="mean",
         batch_norm=bool(sigopt.params.batch_norm),
-        #batch_norm=True,
+        # batch_norm=True,
         input_dropout=sigopt.params.input_dropout,
         # input_dropout=.1,
         dropout=sigopt.params.dropout,
@@ -179,9 +171,8 @@ def run(args: argparse.ArgumentParser) -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-
-    checkpoint = Callback(args.early_stopping_patience,
-                          args.early_stopping_monitor)
+    checkpoint = utils.Callback(args.early_stopping_patience,
+                                args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
@@ -227,7 +218,7 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        log_metrics_to_sigopt(
+        utils.log_metrics_to_sigopt(
             checkpoint,
             'GraphSAGE NS',
             args.dataset,
@@ -237,7 +228,7 @@ def run(args: argparse.ArgumentParser) -> None:
         )
     else:
         # pass
-        log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
+        utils.log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
 
 
 if __name__ == '__main__':
@@ -245,7 +236,7 @@ if __name__ == '__main__':
 
     argparser.add_argument('--dataset', default='ogbn-products', type=str,
                            choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
-    argparser.add_argument('--dataset_root', default='dataset', type=str)
+    argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-reverse-edges', default=False,
@@ -276,6 +267,6 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     if args.download_dataset:
-        download_dataset(args.dataset)
+        utils.download_dataset(args.dataset)
 
     run(args)

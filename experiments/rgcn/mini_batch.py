@@ -9,9 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import utils
 from model import EntityClassify, RelGraphEmbedding
-from utils import (Callback, download_dataset, log_metrics_to_sigopt,
-                   process_dataset)
 
 
 def train(
@@ -43,7 +42,7 @@ def train(
 
         embedding = embedding_layer(in_nodes)
         logits = model(blocks, embedding)[predict_category]
-        
+
         loss = loss_function(logits, batch_labels)
 
         loss.backward()
@@ -93,10 +92,11 @@ def validate(
 
     return time, loss, accuracy
 
+
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, hg, train_idx, valid_idx, test_idx = process_dataset(
+    dataset, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
     )
@@ -108,37 +108,29 @@ def run(args: argparse.ArgumentParser) -> None:
     norms = {'both': 0, 'none': 1, 'right': 2}
     activations = {'leaky_relu': 0, 'relu': 1}
 
-    # sigopt.params.setdefaults({
-    #     'embedding_lr': args.embedding_lr,
-    #     'model_lr': args.model_lr,
-    #     'hidden_feats': args.hidden_feats,
-    #     'num_bases': args.num_bases,
-    #     'num_layers': args.num_layers,
-    #     'norm': args.norm,
-    #     'batch_norm': int(args.batch_norm),
-    #     'activation': args.activation,
-    #     'input_dropout': args.input_dropout,
-    #     'dropout': args.dropout,
-    #     'self_loop': args.self_loop,
-    #     'batch_size': args.batch_size,
-    # })
+    sigopt.params.setdefaults({
+        'embedding_lr': args.embedding_lr,
+        'model_lr': args.model_lr,
+        'hidden_feats': args.hidden_feats,
+        'num_bases': args.num_bases,
+        'num_layers': args.num_layers,
+        'norm': args.norm,
+        'batch_norm': int(args.batch_norm),
+        'activation': args.activation,
+        'input_dropout': args.input_dropout,
+        'dropout': args.dropout,
+        'self_loop': args.self_loop,
+        'batch_size': args.batch_size,
+    })
 
-    fanouts = [int(i) for i in args.fanouts.split(',')]
-
-    # for i in reversed(range(len(fanouts))):
-    #     sigopt.params.setdefaults({f'layer_{i + 1}_fanout': fanouts[i]})
-
-    #     fanouts.pop(i)
-
-    # for i in range(sigopt.params.num_layers):
-    #     fanouts.append(sigopt.params[f'layer_{i + 1}_fanout'])
+    fanouts = utils.set_sigopt_fanouts(args.fanouts)
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
         hg,
         {predict_category: train_idx},
         sampler,
-        batch_size=32, #sigopt.params.batch_size,
+        batch_size=32,  # sigopt.params.batch_size,
         shuffle=True,
         drop_last=False,
         num_workers=4,
@@ -165,16 +157,16 @@ def run(args: argparse.ArgumentParser) -> None:
     model = EntityClassify(
         hg,
         in_feats,
-        4, #sigopt.params.hidden_feats,
+        4,  # sigopt.params.hidden_feats,
         out_feats,
-        2, #sigopt.params.num_bases,
-        2, #sigopt.params.num_layers,
-        norm='none', #norms[f'{sigopt.params.norm}'],
-        batch_norm=False, #bool(sigopt.params.batch_norm),
-        input_dropout=.1,#sigopt.params.input_dropout,
-        dropout=.5,#sigopt.params.dropout,
-        activation=F.leaky_relu, #activations[f'{sigopt.params.activation}'],
-        self_loop=True, #bool(sigopt.params.self_loop)
+        2,  # sigopt.params.num_bases,
+        2,  # sigopt.params.num_layers,
+        norm='none',  # norms[f'{sigopt.params.norm}'],
+        batch_norm=False,  # bool(sigopt.params.batch_norm),
+        input_dropout=.1,  # sigopt.params.input_dropout,
+        dropout=.5,  # sigopt.params.dropout,
+        activation=F.leaky_relu,  # activations[f'{sigopt.params.activation}'],
+        self_loop=True,  # bool(sigopt.params.self_loop)
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
@@ -185,9 +177,8 @@ def run(args: argparse.ArgumentParser) -> None:
         # model.parameters(), lr=sigopt.params.model_lr)
         model.parameters(), lr=1e-3)
 
-
-    checkpoint = Callback(args.early_stopping_patience,
-                          args.early_stopping_monitor)
+    checkpoint = utils.Callback(args.early_stopping_patience,
+                                args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_accuracy = train(
@@ -256,7 +247,7 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        # log_metrics_to_sigopt(
+        # utils.log_metrics_to_sigopt(
         #     checkpoint,
         #     'RGCN NS',
         #     args.dataset,
@@ -265,7 +256,8 @@ def run(args: argparse.ArgumentParser) -> None:
         #     test_time,
         # )
     else:
-        pass #log_metrics_to_sigopt(checkpoint, 'RGCN NS', args.dataset)
+        # utils.log_metrics_to_sigopt(checkpoint, 'RGCN NS', args.dataset)
+        pass
 
 
 if __name__ == '__main__':

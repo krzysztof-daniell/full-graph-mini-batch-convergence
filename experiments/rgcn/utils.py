@@ -364,3 +364,17 @@ def process_dataset(
             g.nodes[predict_category].data['test_mask'], as_tuple=True)[0]
 
     return dataset, g, train_idx, valid_idx, test_idx
+
+
+def set_sigopt_fanouts(fanouts: str) -> list[int]:
+    result = [int(i) for i in fanouts.split(',')]
+
+    for i in reversed(range(len(result))):
+        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': result[i]})
+
+        result.pop(i)
+
+    for i in range(sigopt.params.num_layers):
+        result.append(sigopt.params[f'layer_{i + 1}_fanout'])
+
+    return result
