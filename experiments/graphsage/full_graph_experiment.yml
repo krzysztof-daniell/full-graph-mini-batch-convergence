@@ -1,4 +1,4 @@
-# full_batch_experiment.yml
+# full_graph_experiment.yml
 name: POC - graphsage + full batch ogb-products
 parameters: 
   - name: lr

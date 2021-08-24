@@ -220,7 +220,6 @@ def download_dataset(dataset: str) -> None:
         os.system(command)
         shutil.move('./dataset/ogbn_products', './dataset/ogbn_products_dgl')
 
-
 class OGBDataset:
     def __init__(
         self,

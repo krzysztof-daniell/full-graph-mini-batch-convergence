@@ -213,13 +213,11 @@ def log_metrics_to_sigopt(
 
     sigopt.log_image(metrics_plot, name='convergence plot')
 
-
 def download_dataset(dataset: str) -> None:
     if dataset == 'ogbn-products':
         command = 'aws s3 cp s3://ogb-products ./dataset --recursive'
         os.system(command)
         shutil.move('./dataset/ogbn_products', './dataset/ogbn_products_dgl')
-
 
 class OGBDataset:
     def __init__(

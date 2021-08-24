@@ -11,7 +11,6 @@ import torch.nn.functional as F
 import utils
 from model import GAT
 
-
 def train(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -44,7 +43,6 @@ def train(
 
     return time, loss, accuracy
 
-
 def validate(
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
@@ -71,8 +69,8 @@ def validate(
 
     return time, loss, accuracy
 
-
 def run(args: argparse.ArgumentParser) -> None:
+
     torch.manual_seed(args.seed)
 
     dataset, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -178,14 +176,14 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        # log_metrics_to_sigopt(
-        #     checkpoint,
-        #     'GAT',
-        #     args.dataset,
-        #     test_loss,
-        #     test_accuracy,
-        #     test_time,
-        # )
+        log_metrics_to_sigopt(
+            checkpoint,
+            'GAT',
+            args.dataset,
+            test_loss,
+            test_accuracy,
+            test_time,
+        )
     else:
         utils.log_metrics_to_sigopt(checkpoint, 'GAT', args.dataset)
 
