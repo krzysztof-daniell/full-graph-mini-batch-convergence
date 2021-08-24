@@ -8,6 +8,7 @@ import sigopt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ogb.nodeproppred import Evaluator
 
 import utils
 from model import EntityClassify, RelGraphEmbedding
@@ -20,6 +21,7 @@ def train(
     embedding_optimizer: torch.optim.Optimizer,
     model_optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
     dataloader: dgl.dataloading.NodeDataLoader,
     labels: torch.Tensor,
     predict_category: str,
@@ -27,7 +29,7 @@ def train(
     model.train()
 
     total_loss = 0
-    total_accuracy = 0
+    total_score = 0
 
     start = default_timer()
 
@@ -44,31 +46,29 @@ def train(
         logits = model(blocks, embedding)[predict_category]
 
         loss = loss_function(logits, batch_labels)
+        score = utils.get_evaluation_score(evaluator, logits, batch_labels)
 
         loss.backward()
         model_optimizer.step()
         embedding_optimizer.step()
 
-        _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == batch_labels)
-        accuracy = correct.item() / len(batch_labels)
-
         total_loss += loss.item()
-        total_accuracy += accuracy
+        total_score += score
 
     stop = default_timer()
     time = stop - start
 
     total_loss /= step + 1
-    total_accuracy /= step + 1
+    total_score /= step + 1
 
-    return time, total_loss, total_accuracy
+    return time, total_loss, total_score
 
 
 def validate(
     embedding_layer: nn.Module,
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
     hg: dgl.DGLHeteroGraph,
     labels: torch.Tensor,
     predict_category: str,
@@ -78,25 +78,25 @@ def validate(
 
     start = default_timer()
 
+    valid_labels = labels[mask]
+
     with torch.no_grad():
         embedding = embedding_layer()
-        logits = model(hg, embedding)[predict_category]
-        loss = loss_function(logits[mask], labels[mask])
+        logits = model(hg, embedding)[predict_category][mask]
 
-        _, indices = torch.max(logits[mask], dim=1)
-        correct = torch.sum(indices == labels[mask])
-        accuracy = correct.item() / len(labels[mask])
+        loss = loss_function(logits, valid_labels)
+        score = utils.get_evaluation_score(evaluator, logits, valid_labels)
 
     stop = default_timer()
     time = stop - start
 
-    return time, loss, accuracy
+    return time, loss, score
 
 
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
+    dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
     )
@@ -105,9 +105,6 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    norms = {'both': 0, 'none': 1, 'right': 2}
-    activations = {'leaky_relu': 0, 'relu': 1}
-
     sigopt.params.setdefaults({
         'embedding_lr': args.embedding_lr,
         'model_lr': args.model_lr,
@@ -115,11 +112,11 @@ def run(args: argparse.ArgumentParser) -> None:
         'num_bases': args.num_bases,
         'num_layers': args.num_layers,
         'norm': args.norm,
-        'batch_norm': int(args.batch_norm),
+        'batch_norm': str(args.batch_norm),
         'activation': args.activation,
         'input_dropout': args.input_dropout,
         'dropout': args.dropout,
-        'self_loop': args.self_loop,
+        'self_loop': str(args.self_loop),
         'batch_size': args.batch_size,
     })
 
@@ -130,7 +127,7 @@ def run(args: argparse.ArgumentParser) -> None:
         hg,
         {predict_category: train_idx},
         sampler,
-        batch_size=32,  # sigopt.params.batch_size,
+        batch_size=sigopt.params.batch_size,
         shuffle=True,
         drop_last=False,
         num_workers=4,
@@ -145,7 +142,6 @@ def run(args: argparse.ArgumentParser) -> None:
         num_nodes[ntype] = hg.num_nodes(ntype)
         node_feats[ntype] = hg.nodes[ntype].data.get('feat')
 
-    # norms = {'0': 'both', '1': 'none', '2': 'right'}
     activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
     embedding_layer = RelGraphEmbedding(
@@ -154,73 +150,87 @@ def run(args: argparse.ArgumentParser) -> None:
         num_nodes,
         node_feats,
     )
+    # model = EntityClassify(
+    #     hg,
+    #     in_feats,
+    #     4,  # sigopt.params.hidden_feats,
+    #     out_feats,
+    #     2,  # sigopt.params.num_bases,
+    #     2,  # sigopt.params.num_layers,
+    #     norm='none',  # norms[f'{sigopt.params.norm}'],
+    #     batch_norm=False,  # bool(sigopt.params.batch_norm),
+    #     input_dropout=.1,  # sigopt.params.input_dropout,
+    #     dropout=.5,  # sigopt.params.dropout,
+    #     activation=F.leaky_relu,  # activations[f'{sigopt.params.activation}'],
+    #     self_loop=True,  # bool(sigopt.params.self_loop)
+    # )
     model = EntityClassify(
         hg,
         in_feats,
-        4,  # sigopt.params.hidden_feats,
+        sigopt.params.hidden_feats,
         out_feats,
-        2,  # sigopt.params.num_bases,
-        2,  # sigopt.params.num_layers,
-        norm='none',  # norms[f'{sigopt.params.norm}'],
-        batch_norm=False,  # bool(sigopt.params.batch_norm),
-        input_dropout=.1,  # sigopt.params.input_dropout,
-        dropout=.5,  # sigopt.params.dropout,
-        activation=F.leaky_relu,  # activations[f'{sigopt.params.activation}'],
-        self_loop=True,  # bool(sigopt.params.self_loop)
+        sigopt.params.num_bases,
+        sigopt.params.num_layers,
+        norm=sigopt.params.norm,
+        batch_norm=bool(sigopt.params.batch_norm),
+        input_dropout=sigopt.params.input_dropout,
+        dropout=sigopt.params.dropout,
+        activation=activations[sigopt.params.activation],
+        self_loop=bool(sigopt.params.self_loop),
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        # embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
-        embedding_layer.node_embeddings.parameters()), lr=1e-3)
+        embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
     model_optimizer = torch.optim.Adam(
-        # model.parameters(), lr=sigopt.params.model_lr)
-        model.parameters(), lr=1e-3)
+        model.parameters(), lr=sigopt.params.model_lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
-        train_time, train_loss, train_accuracy = train(
+        train_time, train_loss, train_score = train(
             embedding_layer,
             model,
             device,
             embedding_optimizer,
             model_optimizer,
             loss_function,
+            evaluator,
             train_dataloader,
             labels,
             predict_category,
         )
-        valid_time, valid_loss, valid_accuracy = validate(
+        valid_time, valid_loss, valid_score = validate(
             embedding_layer,
             model,
             loss_function,
+            evaluator,
             hg,
             labels,
             predict_category,
             valid_idx,
         )
 
-        # checkpoint.create(
-        #     epoch,
-        #     train_time,
-        #     valid_time,
-        #     train_loss,
-        #     valid_loss,
-        #     train_accuracy,
-        #     valid_accuracy,
-        #     model,
-        # )
+        checkpoint.create(
+            epoch,
+            train_time,
+            valid_time,
+            train_loss,
+            valid_loss,
+            train_score,
+            valid_score,
+            model,
+        )
 
         print(
             f'Epoch: {epoch + 1:03} '
             f'Train Loss: {train_loss:.2f} '
             f'Valid Loss: {valid_loss:.2f} '
-            f'Train Accuracy: {train_accuracy * 100:.2f} % '
-            f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
+            f'Train Score: {train_score:.4f} '
+            f'Valid Score: {valid_score:.4f} '
             f'Train Epoch Time: {train_time:.2f} '
-            f'Valid Epoch Time: {valid_loss:.2f}'
+            f'Valid Epoch Time: {valid_time:.2f}'
         )
 
         if checkpoint.should_stop:
@@ -231,10 +241,11 @@ def run(args: argparse.ArgumentParser) -> None:
     if args.test_validation:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
-        test_time, test_loss, test_accuracy = validate(
+        test_time, test_loss, test_score = validate(
             embedding_layer,
             model,
             loss_function,
+            evaluator,
             hg,
             labels,
             predict_category,
@@ -243,21 +254,21 @@ def run(args: argparse.ArgumentParser) -> None:
 
         print(
             f'Test Loss: {test_loss:.2f} '
-            f'Test Accuracy: {test_accuracy * 100:.2f} % '
+            f'Test Score: {test_score:.4f} '
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        # utils.log_metrics_to_sigopt(
-        #     checkpoint,
-        #     'RGCN NS',
-        #     args.dataset,
-        #     test_loss,
-        #     test_accuracy,
-        #     test_time,
-        # )
+        utils.log_metrics_to_sigopt(
+            checkpoint,
+            'RGCN NS',
+            args.dataset,
+            test_loss,
+            test_score,
+            test_time,
+        )
     else:
-        # utils.log_metrics_to_sigopt(checkpoint, 'RGCN NS', args.dataset)
-        pass
+        utils.log_metrics_to_sigopt(checkpoint, 'RGCN NS', args.dataset)
+        # pass
 
 
 if __name__ == '__main__':
@@ -265,7 +276,7 @@ if __name__ == '__main__':
 
     argparser.add_argument('--dataset', default='ogbn-mag', type=str,
                            choices=['ogbn-mag'])
-    argparser.add_argument('--dataset_root', default='dataset', type=str)
+    argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
@@ -296,6 +307,6 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     if args.download_dataset:
-        download_dataset(args.dataset)
+        utils.download_dataset(args.dataset)
 
     run(args)

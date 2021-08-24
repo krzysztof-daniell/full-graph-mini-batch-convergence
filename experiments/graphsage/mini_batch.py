@@ -42,6 +42,9 @@ def train(
         loss = loss_function(logits, labels)
         score = utils.get_evaluation_score(evaluator, logits, labels)
 
+        print(f'{logits.shape = }')
+        print(f'{labels.shape = }')
+
         loss.backward()
         optimizer.step()
 
@@ -207,7 +210,7 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Train Score: {train_score:.4f} '
             f'Valid Score: {valid_score:.4f} '
             f'Train Epoch Time: {train_time:.2f} '
-            f'Valid Epoch Time: {valid_loss:.2f}'
+            f'Valid Epoch Time: {valid_time:.2f}'
         )
 
         if checkpoint.should_stop:
