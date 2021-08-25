@@ -14,7 +14,8 @@ class GATConv(nn.Module):
         self,
         node_in_feats: int,
         edge_in_feats: int,
-        out_feats: int,
+        node_out_feats: int,
+        edge_out_feats: int,
         num_heads: int,
         norm: str = 'none',
         attn_dropout: float = 0,
@@ -27,7 +28,8 @@ class GATConv(nn.Module):
         bias: bool = True,
     ):
         super().__init__()
-        self._out_feats = out_feats
+        self._node_out_feats = node_out_feats
+        self._edge_out_feats = edge_out_feats
         self._num_heads = num_heads
         self._norm = norm
         self._attn_dropout = nn.Dropout(attn_dropout)
@@ -39,35 +41,39 @@ class GATConv(nn.Module):
 
         if isinstance(node_in_feats, tuple):
             self._fc_src = nn.Linear(
-                self._in_src_feats, num_heads * out_feats, bias=False)
+                self._in_src_feats, num_heads * node_out_feats, bias=False)
             self._fc_dst = nn.Linear(
-                self._in_dst_feats, num_heads * out_feats, bias=False)
+                self._in_dst_feats, num_heads * node_out_feats, bias=False)
         else:
             self._fc = nn.Linear(self._in_src_feats,
-                                 num_heads * out_feats, bias=False)
+                                 num_heads * node_out_feats, bias=False)
 
-        self._attn_fc_src = nn.Parameter(torch.Tensor(1, num_heads, out_feats))
+        self._attn_src = nn.Parameter(
+            torch.Tensor(1, num_heads, node_out_feats))
 
         if use_attn_dst:
-            self._attn_fc_dst = nn.Parameter(
-                torch.Tensor(1, num_heads, out_feats))
+            self._attn_dst = nn.Parameter(torch.Tensor(
+                1, num_heads, node_out_feats))
         else:
-            self._attn_fc_dst = None
+            self._attn_dst = None
 
         if edge_in_feats > 0:
-            self._attn_fc_edge = nn.Linear(
-                edge_in_feats, num_heads, bias=False)  # TODO: if node attentions are parameters unify it
+            self._fc_edge = nn.Linear(
+                edge_in_feats, num_heads * edge_out_feats, bias=False)
+            self._attn_edge = nn.Parameter(torch.Tensor(
+                1, num_heads, edge_out_feats))
         else:
-            self.register_buffer('_attn_fc_edge', None)
+            self.register_buffer('_fc_edge', None)
+            self.register_buffer('_attn_edge', None)
 
         if residual:
             self._fc_res = nn.Linear(
-                self._in_dst_feats, num_heads * out_feats, bias=False)
+                self._in_dst_feats, num_heads * node_out_feats, bias=False)
         else:
             self.register_buffer('_fc_res', None)
 
         if bias:
-            self._bias = nn.Parameter(torch.Tensor(num_heads * out_feats))
+            self._bias = nn.Parameter(torch.Tensor(num_heads * node_out_feats))
         else:
             self.register_buffer('_bias', None)
 
@@ -82,13 +88,16 @@ class GATConv(nn.Module):
             nn.init.xavier_normal_(self._fc_src.weight, gain=gain)
             nn.init.xavier_normal_(self._fc_dst.weight, gain=gain)
 
-        nn.init.xavier_normal_(self._attn_fc_src, gain=gain)
+        nn.init.xavier_normal_(self._attn_src, gain=gain)
 
-        if self._attn_fc_dst is not None:
-            nn.init.xavier_normal_(self._attn_fc_dst, gain=gain)
+        if self._attn_dst is not None:
+            nn.init.xavier_normal_(self._attn_dst, gain=gain)
 
-        if self._attn_fc_edge is not None:
-            nn.init.xavier_normal_(self._attn_fc_edge.weight, gain=gain)
+        if self._fc_edge is not None:
+            nn.init.xavier_normal_(self._fc_edge.weight, gain=gain)
+
+        if self._attn_edge is not None:
+            nn.init.xavier_normal_(self._attn_edge, gain=gain)
 
         if self._fc_res is not None:
             nn.init.xavier_normal_(self._fc_res.weight, gain=gain)
@@ -116,19 +125,19 @@ class GATConv(nn.Module):
 
             if not hasattr('_fc_src'):
                 feat_fc_src = self._fc(node_inputs_src).view(
-                    -1, self._num_heads, self._out_feats)
+                    -1, self._num_heads, self._node_out_feats)
                 feat_fc_dst = self._fc(node_inputs_dst).view(
-                    -1, self._num_heads, self._out_feats)
+                    -1, self._num_heads, self._node_out_feats)
             else:
                 feat_fc_src = self._fc_src(node_inputs_src).view(
-                    -1, self._num_heads, self._out_feats)
+                    -1, self._num_heads, self._node_out_feats)
                 feat_fc_dst = self._fc_dst(node_inputs_dst).view(
-                    -1, self._num_heads, self._out_feats)
+                    -1, self._num_heads, self._node_out_feats)
         else:
             node_inputs_dst = node_inputs
 
             feat_fc_src = self._fc(node_inputs).view(
-                -1, self._num_heads, self._out_feats)
+                -1, self._num_heads, self._node_out_feats)
 
             if g.is_block:
                 node_inputs_dst = node_inputs_dst[:g.num_dst_nodes()]
@@ -150,12 +159,11 @@ class GATConv(nn.Module):
 
             feat_fc_src *= norm
 
-        attn_src = (feat_fc_src * self._attn_fc_src).sum(dim=-1).unsqueeze(-1)
+        attn_src = (feat_fc_src * self._attn_src).sum(dim=-1).unsqueeze(-1)
         g.srcdata.update({'feat_fc_src': feat_fc_src, 'attn_src': attn_src})
 
-        if self._attn_fc_dst is not None:
-            attn_dst = (feat_fc_dst * self._attn_fc_dst).sum(
-                dim=-1).unsqueeze(-1)
+        if self._attn_dst is not None:
+            attn_dst = (feat_fc_dst * self._attn_dst).sum(dim=-1).unsqueeze(-1)
             g.dstdata.update({'attn_dst': attn_dst})
 
             g.apply_edges(fn.u_add_v('attn_src', 'attn_dst', 'attn_node'))
@@ -165,8 +173,10 @@ class GATConv(nn.Module):
         e = g.edata['attn_node']
 
         if edge_inputs is not None:
-            attn_edge = self._attn_fc_edge(edge_inputs).view(
-                -1, self._num_heads, 1)
+            feat_fc_edge = self._fc_edge(edge_inputs).view(
+                -1, self._num_heads, self._edge_out_feats)
+            attn_edge = (feat_fc_edge *
+                         self._attn_edge).sum(dim=-1).unsqueeze(-1)
 
             g.edata.update({'attn_edge': attn_edge})
             e += g.edata['attn_edge']
@@ -203,10 +213,10 @@ class GATConv(nn.Module):
 
         if self._fc_res is not None:
             x += self._fc_res(node_inputs_dst).view(
-                node_inputs_dst.shape[0], -1, self._out_feats)
+                node_inputs_dst.shape[0], -1, self._node_out_feats)
 
         if self._bias is not None:
-            x += self._bias.view(-1, self._out_feats)
+            x += self._bias.view(-1, self._node_out_feats)
 
         if self._activation is not None:
             x = self._activation(x)
@@ -219,7 +229,8 @@ class GAT(nn.Module):
         self,
         node_in_feats: int,
         edge_in_feats: int,
-        hidden_feats: int,
+        node_hidden_feats: int,
+        edge_hidden_feats: int,
         out_feats: int,
         num_heads: int,
         num_layers: int,
@@ -238,7 +249,6 @@ class GAT(nn.Module):
     ):
         super().__init__()
         self._edge_in_feats = edge_in_feats
-        self._num_heads = num_heads
         self._num_layers = num_layers
         self._input_dropout = nn.Dropout(input_dropout)
         self._dropout = nn.Dropout(dropout)
@@ -250,7 +260,8 @@ class GAT(nn.Module):
         self._layers.append(GATConv(
             node_in_feats,
             edge_in_feats,
-            hidden_feats,
+            node_hidden_feats,
+            edge_hidden_feats,
             num_heads,
             norm=norm,
             attn_dropout=attn_dropout,
@@ -264,9 +275,10 @@ class GAT(nn.Module):
 
         for _ in range(1, num_layers - 1):
             self._layers.append(GATConv(
-                num_heads * hidden_feats,
+                num_heads * node_hidden_feats,
                 edge_in_feats,
-                hidden_feats,
+                node_hidden_feats,
+                edge_hidden_feats,
                 num_heads,
                 norm=norm,
                 attn_dropout=attn_dropout,
@@ -279,9 +291,10 @@ class GAT(nn.Module):
             ))
 
         self._layers.append(GATConv(
-            num_heads * hidden_feats,
+            num_heads * node_hidden_feats,
             edge_in_feats,
             out_feats,
+            edge_hidden_feats,
             num_heads,
             norm=norm,
             attn_dropout=attn_dropout,
@@ -298,7 +311,7 @@ class GAT(nn.Module):
 
             for _ in range(num_layers - 1):
                 self._batch_norms.append(nn.BatchNorm1d(
-                    num_heads * hidden_feats))
+                    num_heads * node_hidden_feats))
         else:
             self._batch_norms = None
 
@@ -307,7 +320,7 @@ class GAT(nn.Module):
         layer_idx: int,
         inputs: torch.Tensor,
     ) -> torch.Tensor:
-        x = inputs
+        x = inputs.flatten(1, -1)
 
         if self._batch_norms is not None:
             x = self._batch_norms[layer_idx](x)
@@ -323,21 +336,32 @@ class GAT(nn.Module):
         self,
         g: Union[dgl.DGLGraph, list[dgl.DGLGraph]],
         node_inputs: torch.Tensor,
-        edge_inputs: torch.Tensor = None,
     ) -> torch.Tensor:
         x = self._input_dropout(node_inputs)
 
         if isinstance(g, list):
             for i, (block, layer) in enumerate(zip(g, self._layers)):
-                x = layer(block, x, edge_inputs).flatten(1, -1)
+                if self._edge_in_feats > 0:
+                    edge_inputs = block.edata['feat']
+                else:
+                    edge_inputs = None
+
+                x = layer(block, x, edge_inputs)
 
                 if i < self._num_layers - 1:
                     x = self._apply_layers(i, x)
         else:
             for i, layer in enumerate(self._layers):
-                x = layer(g, x, edge_inputs).flatten(1, -1)
+                if self._edge_in_feats > 0:
+                    edge_inputs = g.edata['feat']
+                else:
+                    edge_inputs = None
+
+                x = layer(g, x, edge_inputs)
 
                 if i < self._num_layers - 1:
                     x = self._apply_layers(i, x)
+
+        x = x.mean(dim=-2)
 
         return x

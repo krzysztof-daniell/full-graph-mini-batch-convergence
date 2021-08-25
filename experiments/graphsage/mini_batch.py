@@ -42,9 +42,6 @@ def train(
         loss = loss_function(logits, labels)
         score = utils.get_evaluation_score(evaluator, logits, labels)
 
-        print(f'{logits.shape = }')
-        print(f'{labels.shape = }')
-
         loss.backward()
         optimizer.step()
 

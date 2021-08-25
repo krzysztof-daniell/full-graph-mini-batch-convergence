@@ -8,6 +8,7 @@ import sigopt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ogb.nodeproppred import Evaluator
 
 import utils
 from model import GAT
@@ -18,12 +19,13 @@ def train(
     device: Union[str, torch.device],
     optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
     dataloader: dgl.dataloading.NodeDataLoader,
 ) -> tuple[float]:
     model.train()
 
     total_loss = 0
-    total_accuracy = 0
+    total_score = 0
 
     start = default_timer()
 
@@ -36,85 +38,79 @@ def train(
         labels = blocks[-1].dstdata['label']
 
         logits = model(blocks, inputs)
+
         loss = loss_function(logits, labels)
+        score = utils.get_evaluation_score(evaluator, logits, labels)
 
         loss.backward()
         optimizer.step()
 
-        _, indices = torch.max(logits, dim=1)
-        correct = torch.sum(indices == labels)
-        accuracy = correct.item() / len(labels)
-
         total_loss += loss.item()
-        total_accuracy += accuracy
+        total_score += score
 
     stop = default_timer()
     time = stop - start
 
     total_loss /= step + 1
-    total_accuracy /= step + 1
+    total_score /= step + 1
 
-    return time, total_loss, total_accuracy
+    return time, total_loss, total_score
 
 
 def validate(
     model: nn.Module,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
     g: dgl.DGLGraph,
     mask: torch.Tensor,
 ) -> tuple[float]:
-    inputs = g.ndata['feat']
-    labels = g.ndata['label']
-
     model.eval()
 
     start = default_timer()
 
-    with torch.no_grad():
-        logits = model(g, inputs)
-        loss = loss_function(logits[mask], labels[mask])
+    inputs = g.ndata['feat']
+    labels = g.ndata['label'][mask]
 
-        _, indices = torch.max(logits[mask], dim=1)
-        correct = torch.sum(indices == labels[mask])
-        accuracy = correct.item() / len(labels[mask])
+    with torch.no_grad():
+        logits = model(g, inputs)[mask]
+
+        loss = loss_function(logits, labels)
+        score = utils.get_evaluation_score(evaluator, logits, labels)
 
     stop = default_timer()
     time = stop - start
 
-    return time, loss, accuracy
+    return time, loss, score
 
 
 def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
-    dataset, g, train_idx, valid_idx, test_idx = utils.process_dataset(
+    dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
-        root='/home/ksadowski/datasets',
+        root=args.dataset_root,
         reverse_edges=args.graph_reverse_edges,
         self_loop=args.graph_self_loop,
     )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    norms = {'both': 0, 'left': 1, 'none': 2, 'right': 3}
-    activations = {'leaky_relu': 0, 'relu': 1}
-
     sigopt.params.setdefaults({
         'lr': args.lr,
-        'hidden_feats': args.hidden_feats,
+        'node_hidden_feats': args.node_hidden_feats,
         'num_heads': args.num_heads,
         'num_layers': args.num_layers,
-        'norm': norms[args.norm],
-        'batch_norm': int(args.batch_norm),
+        'norm': args.norm,
+        'batch_norm': str(args.batch_norm),
         'input_dropout': args.input_dropout,
         'attn_dropout': args.attn_dropout,
         'edge_dropout': args.edge_dropout,
         'dropout': args.dropout,
         'negative_slope': args.negative_slope,
-        'residual': int(args.residual),
-        'activation': activations[args.activation],
-        'use_attn_dst': int(args.use_attn_dst),
-        'bias': int(args.bias),
+        'residual': str(args.residual),
+        'activation': args.activation,
+        'use_attn_dst': str(args.use_attn_dst),
+        'bias': str(args.bias),
         'batch_size': args.batch_size,
     })
 
@@ -132,20 +128,33 @@ def run(args: argparse.ArgumentParser) -> None:
     )
 
     node_in_feats = g.ndata['feat'].shape[-1]
-    edge_in_feats = 0
+
+    if args.dataset == 'ogbn-proteins':
+        if args.edge_hidden_feats > 0:
+            sigopt.params.setdefaults(
+                {'edge_hidden_feats': args.edge_hidden_feats})
+        else:
+            sigopt.params.setdefaults({'edge_hidden_feats': 16})
+
+        edge_in_feats = g.edata['feat'].shape[-1]
+        edge_hidden_feats = sigopt.params.edge_hidden_feats
+    else:
+        edge_in_feats = 0
+        edge_hidden_feats = 0
+
     out_feats = dataset.num_classes
 
-    norms = {'0': 'both', '1': 'left', '2': 'none', '3': 'right'}
-    activations = {'0': F.leaky_relu, '1': F.relu}
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
     model = GAT(
         node_in_feats,
         edge_in_feats,
-        sigopt.params.hidden_feats,
+        sigopt.params.node_hidden_feats,
+        edge_hidden_feats,
         out_feats,
         sigopt.params.num_heads,
         sigopt.params.num_layers,
-        norm=norms[f'{sigopt.params.norm}'],
+        norm=sigopt.params.norm,
         batch_norm=bool(sigopt.params.batch_norm),
         input_dropout=sigopt.params.input_dropout,
         attn_dropout=sigopt.params.attn_dropout,
@@ -153,22 +162,26 @@ def run(args: argparse.ArgumentParser) -> None:
         dropout=sigopt.params.dropout,
         negative_slope=sigopt.params.negative_slope,
         residual=bool(sigopt.params.residual),
-        activation=activations[f'{sigopt.params.activation}'],
+        activation=activations[sigopt.params.activation],
         use_attn_dst=bool(sigopt.params.use_attn_dst),
         bias=bool(sigopt.params.bias),
     ).to(device)
 
-    loss_function = nn.CrossEntropyLoss().to(device)
+    if args.dataset == 'ogbn-proteins':
+        loss_function = nn.BCEWithLogitsLoss().to(device)
+    else:
+        loss_function = nn.CrossEntropyLoss().to(device)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
 
     for epoch in range(args.num_epochs):
-        train_time, train_loss, train_accuracy = train(
-            model, device, optimizer, loss_function, train_dataloader)
-        valid_time, valid_loss, valid_accuracy = validate(
-            model, loss_function, g, valid_idx)
+        train_time, train_loss, train_score = train(
+            model, device, optimizer, loss_function, evaluator, train_dataloader)
+        valid_time, valid_loss, valid_score = validate(
+            model, loss_function, evaluator, g, valid_idx)
 
         checkpoint.create(
             epoch,
@@ -176,8 +189,8 @@ def run(args: argparse.ArgumentParser) -> None:
             valid_time,
             train_loss,
             valid_loss,
-            train_accuracy,
-            valid_accuracy,
+            train_score,
+            valid_score,
             model,
         )
 
@@ -185,10 +198,10 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Epoch: {epoch + 1:03} '
             f'Train Loss: {train_loss:.2f} '
             f'Valid Loss: {valid_loss:.2f} '
-            f'Train Accuracy: {train_accuracy * 100:.2f} % '
-            f'Valid Accuracy: {valid_accuracy * 100:.2f} % '
+            f'Train Score: {train_score:.4f} '
+            f'Valid Score: {valid_score:.4f} '
             f'Train Epoch Time: {train_time:.2f} '
-            f'Valid Epoch Time: {valid_loss:.2f}'
+            f'Valid Epoch Time: {valid_time:.2f}'
         )
 
         if checkpoint.should_stop:
@@ -199,12 +212,12 @@ def run(args: argparse.ArgumentParser) -> None:
     if args.test_validation:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
-        test_time, test_loss, test_accuracy = validate(
-            model, loss_function, g, test_idx)
+        test_time, test_loss, test_score = validate(
+            model, loss_function, evaluator, g, test_idx)
 
         print(
             f'Test Loss: {test_loss:.2f} '
-            f'Test Accuracy: {test_accuracy * 100:.2f} % '
+            f'Test Score: {test_score:.4f} % '
             f'Test Epoch Time: {test_time:.2f}'
         )
 
@@ -213,7 +226,7 @@ def run(args: argparse.ArgumentParser) -> None:
             'GAT NS',
             args.dataset,
             test_loss,
-            test_accuracy,
+            test_score,
             test_time,
         )
     else:
@@ -225,6 +238,7 @@ if __name__ == '__main__':
 
     argparser.add_argument('--dataset', default='ogbn-products', type=str,
                            choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
+    argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-reverse-edges', default=False,
@@ -233,7 +247,8 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--lr', default=0.001, type=float)
-    argparser.add_argument('--hidden-feats', default=128, type=int)
+    argparser.add_argument('--node-hidden-feats', default=128, type=int)
+    argparser.add_argument('--edge-hidden-feats', default=0, type=int)
     argparser.add_argument('--num-heads', default=4, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--norm', default='none',
