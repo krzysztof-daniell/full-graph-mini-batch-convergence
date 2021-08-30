@@ -15,8 +15,8 @@ parameters:
       min: 1
       max: 4
   - name: batch_norm
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
   - name: input_dropout
     type: double
     bounds:
@@ -47,17 +47,17 @@ parameters:
       min: 0.1
       max: 0.3
   - name: residual
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
   - name: activation
     type: categorical
     categorical_values: [leaky_relu, relu]
   - name: use_attn_dst
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
   - name: bias
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
 metrics:
   - name: best epoch 
     strategy: store

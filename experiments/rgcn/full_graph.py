@@ -100,11 +100,11 @@ def run(args: argparse.ArgumentParser) -> None:
         'num_bases': args.num_bases,
         'num_layers': args.num_layers,
         'norm': args.norm,
-        'batch_norm': str(args.batch_norm),
+        'batch_norm': int(args.batch_norm),
         'activation': args.activation,
         'input_dropout': args.input_dropout,
         'dropout': args.dropout,
-        'self_loop': str(args.self_loop),
+        'self_loop': int(args.self_loop),
     })
 
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]

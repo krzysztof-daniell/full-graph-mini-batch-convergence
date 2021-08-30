@@ -19,8 +19,8 @@ parameters:
     type: categorical
     categorical_values: [gcn, mean]
   - name: batch_norm
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
   - name: activation
     type: categorical
     categorical_values: [leaky_relu, relu]

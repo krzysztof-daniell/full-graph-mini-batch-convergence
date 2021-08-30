@@ -88,7 +88,7 @@ def run(args: argparse.ArgumentParser) -> None:
         'hidden_feats': args.hidden_feats,
         'num_layers': args.num_layers,
         'aggregator_type': args.aggregator_type,
-        'batch_norm': str(args.batch_norm),
+        'batch_norm': int(args.batch_norm),
         'activation': args.activation,
         'input_dropout': args.input_dropout,
         'dropout': args.dropout,

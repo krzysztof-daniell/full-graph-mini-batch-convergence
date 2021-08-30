@@ -30,8 +30,8 @@ parameters:
     type: categorical
     categorical_values: [both, none, right]
   - name: batch_norm
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
   - name: activation 
     type: categorical
     categorical_values: [leaky_relu, relu]
@@ -50,8 +50,8 @@ parameters:
       shape_a: 2
       shape_b: 3
   - name: self_loop
-    type: categorical
-    categorical_values: [True, False]
+    type: int
+    grid: [0, 1]
   - name: batch_size
     type: int
     grid: [50, 100, 250, 500, 750, 1000]
