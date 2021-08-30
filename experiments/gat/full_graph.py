@@ -36,10 +36,10 @@ def train(
     loss.backward()
     optimizer.step()
 
-    loss = loss.item()
-
     stop = default_timer()
     time = stop - start
+
+    loss = loss.item()
 
     return time, loss, score
 
@@ -65,6 +65,8 @@ def validate(
 
     stop = default_timer()
     time = stop - start
+
+    loss = loss.item()
 
     return time, loss, score
 

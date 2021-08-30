@@ -80,6 +80,8 @@ def validate(
     stop = default_timer()
     time = stop - start
 
+    loss = loss.item()
+
     return time, loss, score
 
 

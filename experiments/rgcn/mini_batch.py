@@ -90,6 +90,8 @@ def validate(
     stop = default_timer()
     time = stop - start
 
+    loss = loss.item()
+
     return time, loss, score
 
 
@@ -150,20 +152,6 @@ def run(args: argparse.ArgumentParser) -> None:
         num_nodes,
         node_feats,
     )
-    # model = EntityClassify(
-    #     hg,
-    #     in_feats,
-    #     4,  # sigopt.params.hidden_feats,
-    #     out_feats,
-    #     2,  # sigopt.params.num_bases,
-    #     2,  # sigopt.params.num_layers,
-    #     norm='none',  # norms[f'{sigopt.params.norm}'],
-    #     batch_norm=False,  # bool(sigopt.params.batch_norm),
-    #     input_dropout=.1,  # sigopt.params.input_dropout,
-    #     dropout=.5,  # sigopt.params.dropout,
-    #     activation=F.leaky_relu,  # activations[f'{sigopt.params.activation}'],
-    #     self_loop=True,  # bool(sigopt.params.self_loop)
-    # )
     model = EntityClassify(
         hg,
         in_feats,
@@ -211,16 +199,6 @@ def run(args: argparse.ArgumentParser) -> None:
             predict_category,
             valid_idx,
         )
-        test_time, test_loss, test_score = validate(
-            embedding_layer,
-            model,
-            loss_function,
-            evaluator,
-            hg,
-            labels,
-            predict_category,
-            test_idx,
-        )
 
         checkpoint.create(
             epoch,
@@ -237,10 +215,8 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Epoch: {epoch + 1:03} '
             f'Train Loss: {train_loss:.2f} '
             f'Valid Loss: {valid_loss:.2f} '
-            f'Test Loss: {test_loss:.2f} '
             f'Train Score: {train_score:.4f} '
             f'Valid Score: {valid_score:.4f} '
-            f'Test Score: {test_score:.4f} '
             f'Train Epoch Time: {train_time:.2f} '
             f'Valid Epoch Time: {valid_time:.2f}'
         )
@@ -254,9 +230,6 @@ def run(args: argparse.ArgumentParser) -> None:
         embedding_layer.load_state_dict(
             checkpoint.best_epoch_model_parameters['embedding_layer'])
         model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
-
-        print(f'{checkpoint.best_epoch = }')
-        print(f'{checkpoint.best_epoch_valid_loss = }')
 
         test_time, test_loss, test_score = validate(
             embedding_layer,
@@ -285,7 +258,6 @@ def run(args: argparse.ArgumentParser) -> None:
         )
     else:
         utils.log_metrics_to_sigopt(checkpoint, 'RGCN NS', args.dataset)
-        # pass
 
 
 if __name__ == '__main__':
