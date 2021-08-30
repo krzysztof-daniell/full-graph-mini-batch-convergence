@@ -1,5 +1,6 @@
 import os
 import shutil
+from copy import deepcopy
 from typing import Union
 
 import dgl
@@ -127,9 +128,10 @@ class Callback:
 
             if isinstance(model, dict):
                 for name, current_model in model.items():
-                    self._model_parameters[name] = current_model.state_dict()
+                    self._model_parameters[name] = deepcopy(
+                        current_model.state_dict())
             else:
-                self._model_parameters = model.state_dict()
+                self._model_parameters = deepcopy(model.state_dict())
 
             self._lookback = 0
         else:
@@ -219,6 +221,7 @@ def download_dataset(dataset: str) -> None:
         command = 'aws s3 cp s3://ogb-products ./dataset --recursive'
         os.system(command)
         shutil.move('./dataset/ogbn_products', './dataset/ogbn_products_dgl')
+
 
 class OGBDataset:
     def __init__(
