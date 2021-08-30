@@ -211,6 +211,16 @@ def run(args: argparse.ArgumentParser) -> None:
             predict_category,
             valid_idx,
         )
+        test_time, test_loss, test_score = validate(
+            embedding_layer,
+            model,
+            loss_function,
+            evaluator,
+            hg,
+            labels,
+            predict_category,
+            test_idx,
+        )
 
         checkpoint.create(
             epoch,
@@ -220,15 +230,17 @@ def run(args: argparse.ArgumentParser) -> None:
             valid_loss,
             train_score,
             valid_score,
-            model,
+            {'embedding_layer': embedding_layer, 'model': model},
         )
 
         print(
             f'Epoch: {epoch + 1:03} '
             f'Train Loss: {train_loss:.2f} '
             f'Valid Loss: {valid_loss:.2f} '
+            f'Test Loss: {test_loss:.2f} '
             f'Train Score: {train_score:.4f} '
             f'Valid Score: {valid_score:.4f} '
+            f'Test Score: {test_score:.4f} '
             f'Train Epoch Time: {train_time:.2f} '
             f'Valid Epoch Time: {valid_time:.2f}'
         )
@@ -239,7 +251,12 @@ def run(args: argparse.ArgumentParser) -> None:
             break
 
     if args.test_validation:
-        model.load_state_dict(checkpoint.best_epoch_model_parameters)
+        embedding_layer.load_state_dict(
+            checkpoint.best_epoch_model_parameters['embedding_layer'])
+        model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
+
+        print(f'{checkpoint.best_epoch = }')
+        print(f'{checkpoint.best_epoch_valid_loss = }')
 
         test_time, test_loss, test_score = validate(
             embedding_layer,

@@ -181,7 +181,7 @@ def run(args: argparse.ArgumentParser) -> None:
             valid_loss,
             train_score,
             valid_score,
-            model,
+            {'embedding_layer': embedding_layer, 'model': model},
         )
 
         print(
@@ -200,7 +200,9 @@ def run(args: argparse.ArgumentParser) -> None:
             break
 
     if args.test_validation:
-        model.load_state_dict(checkpoint.best_epoch_model_parameters)
+        embedding_layer.load_state_dict(
+            checkpoint.best_epoch_model_parameters['embedding_layer'])
+        model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
 
         test_time, test_loss, test_score = validate(
             embedding_layer,
