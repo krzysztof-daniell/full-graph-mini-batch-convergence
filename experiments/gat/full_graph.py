@@ -1,6 +1,6 @@
 import argparse
-from collections.abc import Callable
 from timeit import default_timer
+from typing import Callable
 
 import dgl
 import sigopt
@@ -11,6 +11,7 @@ from ogb.nodeproppred import Evaluator
 
 import utils
 from model import GAT
+
 
 def train(
     model: nn.Module,

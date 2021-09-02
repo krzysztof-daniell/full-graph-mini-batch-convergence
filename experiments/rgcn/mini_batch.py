@@ -74,6 +74,7 @@ def validate(
     predict_category: str,
     mask: torch.Tensor,
 ) -> tuple[float]:
+    embedding_layer.eval()
     model.eval()
 
     start = default_timer()

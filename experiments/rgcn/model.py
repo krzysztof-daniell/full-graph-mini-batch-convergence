@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from typing import Union
+from typing import Callable, Union
 
 import dgl
 import dgl.nn.pytorch as dglnn

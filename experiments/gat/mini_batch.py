@@ -1,7 +1,6 @@
 import argparse
-from collections.abc import Callable
 from timeit import default_timer
-from typing import Union
+from typing import Callable, Union
 
 import dgl
 import sigopt

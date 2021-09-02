@@ -1,7 +1,6 @@
 import argparse
-from collections.abc import Callable
 from timeit import default_timer
-from typing import Union
+from typing import Callable, Union
 
 import dgl
 import sigopt
@@ -136,6 +135,8 @@ def run(args: argparse.ArgumentParser) -> None:
     out_feats = dataset.num_classes
 
     activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
+
+    print(f'aggregator type = {sigopt.params.aggregator_type}')
 
     model = GraphSAGE(
         in_feats,
