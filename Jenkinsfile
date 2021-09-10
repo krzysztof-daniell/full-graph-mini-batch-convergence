@@ -142,11 +142,14 @@ pipeline {
                             withCredentials {
                                 // TODO: Start AWS Instance
 
-                                // connect to AWS instance, run docker container, 
+                                // connect to AWS instance, 
+                                // turn off hyperthreading (check if it works when run from docker),
+                                // run docker container, 
                                 // clone repo to container,
                                 // run experiment in container
                                 sh """ssh XXXXXXXXXXXXXXX \
                                     '${runContainer(containerName, env.IMAGE_NAME)} \
+                                    && ${turnOffHyperthreading()} \
                                     && ${cloneRepository(containerName, env.REPOSITORY_URL, machineUserCredentials)} \
                                     && ${runExperiment(containerName, env.EXPERIMENT_ID, param.OPTIMIZATION_TARGET, param.MODEL, param.DATASET, param.TRAINING_METHOD)} \
                                     && docker stop ${containerName}'
