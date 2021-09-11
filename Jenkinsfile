@@ -128,7 +128,7 @@ pipeline {
         stage('Setup Experiment') {
             steps {
                 script {
-                    if (!env.EXPERIMENT_ID.notBlank()) {
+                    if (!env.EXPERIMENT_ID) {
                         withCredentials([
                             usernameColonPassword(
                                 credentialsId: 'machine-user-credentials', 
