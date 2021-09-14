@@ -84,7 +84,7 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser) -> None:
+def log_run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -96,7 +96,7 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    sigopt.params.setdefaults({
+    run.params.setdefaults({
         'embedding_lr': args.embedding_lr,
         'model_lr': args.model_lr,
         'hidden_feats': args.hidden_feats,
@@ -131,23 +131,23 @@ def run(args: argparse.ArgumentParser) -> None:
     model = EntityClassify(
         hg,
         in_feats,
-        sigopt.params.hidden_feats,
+        run.params.hidden_feats,
         out_feats,
-        sigopt.params.num_bases,
-        sigopt.params.num_layers,
-        norm=sigopt.params.norm,
-        batch_norm=bool(sigopt.params.batch_norm),
-        input_dropout=sigopt.params.input_dropout,
-        dropout=sigopt.params.dropout,
-        activation=activations[sigopt.params.activation],
-        self_loop=bool(sigopt.params.self_loop),
+        run.params.num_bases,
+        run.params.num_layers,
+        norm=run.params.norm,
+        batch_norm=bool(run.params.batch_norm),
+        input_dropout=run.params.input_dropout,
+        dropout=run.params.dropout,
+        activation=activations[run.params.activation],
+        self_loop=bool(run.params.self_loop),
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
+        embedding_layer.node_embeddings.parameters()), lr=run.params.embedding_lr)
     model_optimizer = torch.optim.Adam(
-        model.parameters(), lr=sigopt.params.model_lr)
+        model.parameters(), lr=run.params.model_lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
@@ -233,7 +233,6 @@ def run(args: argparse.ArgumentParser) -> None:
             test_time,
         )
     else:
-        # pass
         utils.log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
 
 

@@ -85,7 +85,7 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    sigopt.params.setdefaults({
+    run.params.setdefaults({
         'lr': args.lr,
         'hidden_feats': args.hidden_feats,
         'num_layers': args.num_layers,
@@ -103,14 +103,14 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     model = GraphSAGE(
         in_feats,
-        sigopt.params.hidden_feats,
+        run.params.hidden_feats,
         out_feats,
-        sigopt.params.num_layers,
-        aggregator_type=sigopt.params.aggregator_type,
-        batch_norm=bool(sigopt.params.batch_norm),
-        input_dropout=sigopt.params.input_dropout,
-        dropout=sigopt.params.dropout,
-        activation=activations[sigopt.params.activation],
+        run.params.num_layers,
+        aggregator_type=run.params.aggregator_type,
+        batch_norm=bool(run.params.batch_norm),
+        input_dropout=run.params.input_dropout,
+        dropout=run.params.dropout,
+        activation=activations[run.params.activation],
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -118,7 +118,7 @@ def log_run(args: argparse.ArgumentParser) -> None:
     else:
         loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=run.params.lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)

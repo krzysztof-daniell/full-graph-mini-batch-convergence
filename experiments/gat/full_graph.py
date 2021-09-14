@@ -84,7 +84,7 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    sigopt.params.setdefaults({
+    run.params.setdefaults({
         'lr': args.lr,
         'node_hidden_feats': args.node_hidden_feats,
         'num_heads': args.num_heads,
@@ -106,13 +106,13 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     if args.dataset == 'ogbn-proteins':
         if args.edge_hidden_feats > 0:
-            sigopt.params.setdefaults(
+            run.params.setdefaults(
                 {'edge_hidden_feats': args.edge_hidden_feats})
         else:
-            sigopt.params.setdefaults({'edge_hidden_feats': 16})
+            run.params.setdefaults({'edge_hidden_feats': 16})
 
         edge_in_feats = g.edata['feat'].shape[-1]
-        edge_hidden_feats = sigopt.params.edge_hidden_feats
+        edge_hidden_feats = run.params.edge_hidden_feats
     else:
         edge_in_feats = 0
         edge_hidden_feats = 0
@@ -124,22 +124,22 @@ def log_run(args: argparse.ArgumentParser) -> None:
     model = GAT(
         node_in_feats,
         edge_in_feats,
-        sigopt.params.node_hidden_feats,
+        run.params.node_hidden_feats,
         edge_hidden_feats,
         out_feats,
-        sigopt.params.num_heads,
-        sigopt.params.num_layers,
-        norm=sigopt.params.norm,
-        batch_norm=bool(sigopt.params.batch_norm),
-        input_dropout=sigopt.params.input_dropout,
-        attn_dropout=sigopt.params.attn_dropout,
-        edge_dropout=sigopt.params.edge_dropout,
-        dropout=sigopt.params.dropout,
-        negative_slope=sigopt.params.negative_slope,
-        residual=bool(sigopt.params.residual),
-        activation=activations[sigopt.params.activation],
-        use_attn_dst=bool(sigopt.params.use_attn_dst),
-        bias=bool(sigopt.params.bias),
+        run.params.num_heads,
+        run.params.num_layers,
+        norm=run.params.norm,
+        batch_norm=bool(run.params.batch_norm),
+        input_dropout=run.params.input_dropout,
+        attn_dropout=run.params.attn_dropout,
+        edge_dropout=run.params.edge_dropout,
+        dropout=run.params.dropout,
+        negative_slope=run.params.negative_slope,
+        residual=bool(run.params.residual),
+        activation=activations[run.params.activation],
+        use_attn_dst=bool(run.params.use_attn_dst),
+        bias=bool(run.params.bias),
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -147,7 +147,7 @@ def log_run(args: argparse.ArgumentParser) -> None:
     else:
         loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=run.params.lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)

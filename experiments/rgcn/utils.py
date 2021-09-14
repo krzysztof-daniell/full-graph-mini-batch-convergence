@@ -106,7 +106,7 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        sigopt.log_checkpoint({
+        run.log_checkpoint({
             'train loss': train_loss,
             'valid loss': valid_loss,
             'train accuracy': train_accuracy,
@@ -182,30 +182,30 @@ def log_metrics_to_sigopt(
     test_accuracy: float = None,
     test_time: float = None,
 ) -> None:
-    sigopt.log_model(model_name)
-    sigopt.log_dataset(dataset)
-    sigopt.log_metric('best epoch', checkpoint.best_epoch)
-    sigopt.log_metric('best epoch - train loss',
+    run.log_model(model_name)
+    run.log_dataset(dataset)
+    run.log_metric('best epoch', checkpoint.best_epoch)
+    run.log_metric('best epoch - train loss',
                       checkpoint.best_epoch_train_loss)
-    sigopt.log_metric('best epoch - train accuracy',
+    run.log_metric('best epoch - train accuracy',
                       checkpoint.best_epoch_train_accuracy)
-    sigopt.log_metric('best epoch - valid loss',
+    run.log_metric('best epoch - valid loss',
                       checkpoint.best_epoch_valid_loss)
-    sigopt.log_metric('best epoch - valid accuracy',
+    run.log_metric('best epoch - valid accuracy',
                       checkpoint.best_epoch_valid_accuracy)
-    sigopt.log_metric('best epoch - training time',
+    run.log_metric('best epoch - training time',
                       checkpoint.best_epoch_training_time)
-    sigopt.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
-    sigopt.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
+    run.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
+    run.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
 
     if test_loss is not None:
-        sigopt.log_metric('best epoch - test loss', test_loss)
+        run.log_metric('best epoch - test loss', test_loss)
 
     if test_accuracy is not None:
-        sigopt.log_metric('best epoch - test accuracy', test_accuracy)
+        run.log_metric('best epoch - test accuracy', test_accuracy)
 
     if test_time is not None:
-        sigopt.log_metric('test epoch time', test_time)
+        run.log_metric('test epoch time', test_time)
 
     metrics_plot = get_metrics_plot(
         checkpoint.train_accuracies,
@@ -214,7 +214,7 @@ def log_metrics_to_sigopt(
         checkpoint.valid_losses,
     )
 
-    sigopt.log_image(metrics_plot, name='convergence plot')
+    run.log_image(metrics_plot, name='convergence plot')
 
 
 def download_dataset(dataset: str) -> None:
@@ -384,12 +384,12 @@ def set_sigopt_fanouts(fanouts: str, as_metadata: bool = True) -> list[int]:
 
     for i in reversed(range(len(result))):
         k,v = f'layer_{i + 1}_fanout', result[i]
-        sigopt.log_metadata(k,v) if as_metadata else sigopt.params.setdefault(k,v)
+        run.log_metadata(k,v) if as_metadata else run.params.setdefault(k,v)
         result.pop(i)
 
     if not as_metadata:
-        for i in range(sigopt.params.num_layers):
-            result.append(sigopt.params[f'layer_{i + 1}_fanout'])
+        for i in range(run.params.num_layers):
+            result.append(run.params[f'layer_{i + 1}_fanout'])
 
     return result
 
@@ -398,14 +398,13 @@ def log_system_info() -> None:
     # https://psutil.readthedocs.io/en/latest/#processes
     process = psutil.Process()
     virtual_memory = psutil.virtual_memory()
-    sigopt.log_metadata("Python version", sys.version.split()[0])
-    sigopt.log_metadata("Operating System", sys.platform)
-    sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
-    # sigopt.log_metadata("Process CPU Percent", process.cpu_percent())
-    sigopt.log_metadata("psutil.virtual_memory().total", psutil._common.bytes2human(virtual_memory.total))
-    sigopt.log_metadata("psutil.virtual_memory().available", psutil._common.bytes2human(virtual_memory.available))
-    # sigopt.log_metadata("Virtual Memory Percent", virtual_memory.percent)
-
+    run.log_metadata("Python version", sys.version.split()[0])
+    run.log_metadata("Operating System", sys.platform)
+    run.log_metadata("psutil.Process().num_threads", process.num_threads())
+    # run.log_metadata("Process CPU Percent", process.cpu_percent())
+    run.log_metadata("psutil.virtual_memory().total", psutil._common.bytes2human(virtual_memory.total))
+    run.log_metadata("psutil.virtual_memory().available", psutil._common.bytes2human(virtual_memory.available))
+    # run.log_metadata("Virtual Memory Percent", virtual_memory.percent)
 
 def get_evaluation_score(
     evaluator: Evaluator,
