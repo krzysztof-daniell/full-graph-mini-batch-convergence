@@ -296,9 +296,7 @@ if __name__ == '__main__':
 
         experiment = sigopt.Connection(token).experiments(args.experiment_id)
 
-    # war = lambda: experiment.fetch().progress.observation_count < experiment.fetch().observation_budget
-
-    while experiment.fetch().progress.observation_count < experiment.fetch().observation_budget:
-        print(experiment.fetch().progress)
-
-        run(args, experiment)
+        while utils.is_experiment_finished(experiment):
+            run(args, experiment)
+    else:
+        run(args)

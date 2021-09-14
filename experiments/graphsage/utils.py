@@ -187,23 +187,31 @@ def log_metrics_to_sigopt(
     test_time: float = None,
 ) -> None:
     values = [
-        {'name': 'model', 'value': model_name},
-        {'name': 'dataset', 'value': dataset},
+        # {'name': 'model', 'value': model_name},
+        # {'name': 'dataset', 'value': dataset},
         {'name': 'best epoch', 'value': checkpoint.best_epoch},
-        {'name': 'best epoch - train loss', 'value': checkpoint.best_epoch_train_loss},
-        {'name': 'best epoch - train accuracy', 'value': checkpoint.best_epoch_train_accuracy},
-        {'name': 'best epoch - valid loss', 'value': checkpoint.best_epoch_valid_loss},
-        {'name': 'best epoch - valid accuracy', 'value': checkpoint.best_epoch_valid_accuracy},
-        {'name': 'best epoch - training time', 'value': checkpoint.best_epoch_training_time},
-        {'name': 'avg train epoch time', 'value': np.mean(checkpoint.train_times)},
-        {'name': 'avg valid epoch time', 'value': np.mean(checkpoint.valid_times)},
+        {'name': 'best epoch - train loss',
+            'value': checkpoint.best_epoch_train_loss},
+        {'name': 'best epoch - train accuracy',
+            'value': checkpoint.best_epoch_train_accuracy},
+        {'name': 'best epoch - valid loss',
+            'value': checkpoint.best_epoch_valid_loss},
+        {'name': 'best epoch - valid accuracy',
+            'value': checkpoint.best_epoch_valid_accuracy},
+        {'name': 'best epoch - training time',
+            'value': checkpoint.best_epoch_training_time},
+        {'name': 'avg train epoch time',
+            'value': np.mean(checkpoint.train_times)},
+        {'name': 'avg valid epoch time',
+            'value': np.mean(checkpoint.valid_times)},
     ]
 
     if test_loss is not None:
         values.append({'name': 'best epoch - test loss', 'value': test_loss})
 
     if test_accuracy is not None:
-        values.append({'name': 'best epoch - test accuracy', 'value': test_accuracy})
+        values.append(
+            {'name': 'best epoch - test accuracy', 'value': test_accuracy})
 
     if test_time is not None:
         values.append({'name': 'test epoch time', 'value': test_time})
@@ -393,7 +401,8 @@ def set_sigopt_fanouts(fanouts: str) -> list[int]:
 
     for i in range(sigopt.get_parameter('num_layers', default=len(default_fanouts))):
         if i < len(default_fanouts):
-            fanout = sigopt.get_parameter(f'layer_{i + 1}_fanout', default=default_fanouts[i])
+            fanout = sigopt.get_parameter(
+                f'layer_{i + 1}_fanout', default=default_fanouts[i])
         else:
             fanout = sigopt.get_parameter(f'layer_{i + 1}_fanout')
 
@@ -401,7 +410,8 @@ def set_sigopt_fanouts(fanouts: str) -> list[int]:
 
     return sigopt_fanouts
 
-def log_system_info() -> None: 
+
+def log_system_info() -> None:
 
     # https://psutil.readthedocs.io/en/latest/#processes
     process = psutil.Process()
@@ -410,8 +420,10 @@ def log_system_info() -> None:
     sigopt.log_metadata("Operating System", sys.platform)
     sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
     # run.log_metadata("Process CPU Percent", process.cpu_percent())
-    sigopt.log_metadata("psutil.virtual_memory().total", psutil._common.bytes2human(virtual_memory.total))
-    sigopt.log_metadata("psutil.virtual_memory().available", psutil._common.bytes2human(virtual_memory.available))
+    sigopt.log_metadata("psutil.virtual_memory().total",
+                        psutil._common.bytes2human(virtual_memory.total))
+    sigopt.log_metadata("psutil.virtual_memory().available",
+                        psutil._common.bytes2human(virtual_memory.available))
     # run.log_metadata("Virtual Memory Percent", virtual_memory.percent)
 
 
@@ -433,3 +445,10 @@ def get_evaluation_score(
     }).popitem()
 
     return score
+
+
+def is_experiment_finished(experiment) -> bool:
+    observation_count = experiment.fetch().progress.observation_count
+    observation_budget = experiment.fetch().observation_budget
+
+    return observation_count <= observation_budget
