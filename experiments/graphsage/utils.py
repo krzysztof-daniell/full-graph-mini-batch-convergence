@@ -177,6 +177,8 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
+    experiment,
+    suggestion,
     checkpoint: Callback,
     model_name: str,
     dataset: str,
@@ -184,30 +186,27 @@ def log_metrics_to_sigopt(
     test_accuracy: float = None,
     test_time: float = None,
 ) -> None:
-    sigopt.log_model(model_name)
-    sigopt.log_dataset(dataset)
-    sigopt.log_metric('best epoch', checkpoint.best_epoch)
-    sigopt.log_metric('best epoch - train loss',
-                      checkpoint.best_epoch_train_loss)
-    sigopt.log_metric('best epoch - train accuracy',
-                      checkpoint.best_epoch_train_accuracy)
-    sigopt.log_metric('best epoch - valid loss',
-                      checkpoint.best_epoch_valid_loss)
-    sigopt.log_metric('best epoch - valid accuracy',
-                      checkpoint.best_epoch_valid_accuracy)
-    sigopt.log_metric('best epoch - training time',
-                      checkpoint.best_epoch_training_time)
-    sigopt.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
-    sigopt.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
+    values = [
+        {'name': 'model', 'value': model_name},
+        {'name': 'dataset', 'value': dataset},
+        {'name': 'best epoch', 'value': checkpoint.best_epoch},
+        {'name': 'best epoch - train loss', 'value': checkpoint.best_epoch_train_loss},
+        {'name': 'best epoch - train accuracy', 'value': checkpoint.best_epoch_train_accuracy},
+        {'name': 'best epoch - valid loss', 'value': checkpoint.best_epoch_valid_loss},
+        {'name': 'best epoch - valid accuracy', 'value': checkpoint.best_epoch_valid_accuracy},
+        {'name': 'best epoch - training time', 'value': checkpoint.best_epoch_training_time},
+        {'name': 'avg train epoch time', 'value': np.mean(checkpoint.train_times)},
+        {'name': 'avg valid epoch time', 'value': np.mean(checkpoint.valid_times)},
+    ]
 
     if test_loss is not None:
-        sigopt.log_metric('best epoch - test loss', test_loss)
+        values.append({'name': 'best epoch - test loss', 'value': test_loss})
 
     if test_accuracy is not None:
-        sigopt.log_metric('best epoch - test accuracy', test_accuracy)
+        values.append({'name': 'best epoch - test accuracy', 'value': test_accuracy})
 
     if test_time is not None:
-        sigopt.log_metric('test epoch time', test_time)
+        values.append({'name': 'test epoch time', 'value': test_time})
 
     metrics_plot = get_metrics_plot(
         checkpoint.train_accuracies,
@@ -215,8 +214,16 @@ def log_metrics_to_sigopt(
         checkpoint.train_losses,
         checkpoint.valid_losses,
     )
+    # values.append({'name': 'convergence plot', 'value': metrics_plot})
 
-    sigopt.log_image(metrics_plot, name='convergence plot')
+    experiment.observations().create(suggestion=suggestion.id, values=values)
+
+    metrics_plot = get_metrics_plot(
+        checkpoint.train_accuracies,
+        checkpoint.valid_accuracies,
+        checkpoint.train_losses,
+        checkpoint.valid_losses,
+    )
 
 
 def download_dataset(dataset: str) -> None:

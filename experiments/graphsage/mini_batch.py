@@ -95,14 +95,19 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
         self_loop=args.graph_self_loop,
     )
 
-    print(f'{torch.median(g.in_degrees()).item() = }')
+    # print(f'{torch.median(g.in_degrees()).item() = }')
+    # print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
+    # print(f'{torch.min(g.in_degrees()).item() = }')
+    # print(f'{torch.max(g.in_degrees()).item() = }')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if experiment is not None:
-        assignments = experiment.suggestions().create().assignments
+        suggestion = experiment.suggestions().create()
+        assignments = suggestion.assignments
 
-        fanouts = [assignments[f'layer_{i + 1}_fanout'] for i in range(int(assignments['num_layers']))]
+        fanouts = [assignments[f'layer_{i + 1}_fanout']
+                   for i in range(int(assignments['num_layers']))]
         batch_size = assignments['batch_size']
         lr = assignments['lr']
         hidden_feats = assignments['hidden_feats']
@@ -214,16 +219,26 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        utils.log_metrics_to_sigopt(
-            checkpoint,
-            'GraphSAGE NS',
-            args.dataset,
-            test_loss,
-            test_score,
-            test_time,
-        )
-    else:
-        utils.log_metrics_to_sigopt(checkpoint, 'GraphSAGE NS', args.dataset)
+    if experiment is not None:
+        if args.test_validation:
+            utils.log_metrics_to_sigopt(
+                experiment,
+                suggestion,
+                checkpoint,
+                'GraphSAGE NS',
+                args.dataset,
+                test_loss,
+                test_score,
+                test_time,
+            )
+        else:
+            utils.log_metrics_to_sigopt(
+                experiment,
+                suggestion,
+                checkpoint,
+                'GraphSAGE NS',
+                args.dataset,
+            )
 
 
 if __name__ == '__main__':
@@ -278,12 +293,12 @@ if __name__ == '__main__':
                     '--sigopt-api-token argument or set '
                     'SIGOPT_API_TOKEN environment variable.'
                 )
-        
-        experiment = sigopt.Connection(token).experiments(args.experiment_id)
 
-        print(experiment.fetch().progress)
+        experiment = sigopt.Connection(token).experiments(args.experiment_id)
 
     # war = lambda: experiment.fetch().progress.observation_count < experiment.fetch().observation_budget
 
     while experiment.fetch().progress.observation_count < experiment.fetch().observation_budget:
+        print(experiment.fetch().progress)
+
         run(args, experiment)
