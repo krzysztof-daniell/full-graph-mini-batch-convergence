@@ -1,20 +1,18 @@
-# mini_batch_experiment.yml
-name: POC - graphsage + mini batch ogb-products
+# ogbn_products_mini_batch_accuracy.yml
+name: graphsage - ogbn-products - mini-batch - accuracy
+conditionals:
+  - name: num_layers
+    values: ['2', '3', '4', '5']
 parameters: 
   - name: lr
     type: double
     transformation: log
     bounds:
-      min: 1e-4
-      max: 5e-2
+      min: 0.0001
+      max: 0.05
   - name: hidden_feats
     type: int
-    grid: [8, 16, 32, 64, 128, 256]
-  - name: number_of_layers
-    type: int
-    bounds:
-      min: 1
-      max: 4
+    grid: [16, 32, 64, 128, 256, 512]
   - name: aggregator_type
     type: categorical
     categorical_values: [gcn, mean]
@@ -24,6 +22,11 @@ parameters:
   - name: activation
     type: categorical
     categorical_values: [leaky_relu, relu]
+  - name: input_dropout
+    type: double
+    bounds:
+      min: 0.01
+      max: 0.7
   - name: dropout
     type: double
     bounds:
@@ -35,7 +38,42 @@ parameters:
       shape_b: 3
   - name: batch_size
     type: int
-    grid: [50, 100, 250, 500, 750, 1000]
+    grid: [500, 750, 1000, 2000, 4000, 8000, 16000]
+  - name: layer_1_fanout
+    type: int
+    conditions: 
+      num_layers: ['2', '3', '4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_2_fanout
+    type: int
+    conditions: 
+      num_layers: ['2', '3', '4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_3_fanout
+    type: int
+    conditions: 
+      num_layers: ['3', '4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_4_fanout
+    type: int
+    conditions: 
+      num_layers: ['4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_5_fanout
+    type: int
+    conditions: 
+      num_layers: ['5']
+    bounds:
+      min: 5
+      max: 26
 metrics:
   - name: best epoch 
     strategy: store
@@ -61,6 +99,6 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-budget: 50
-parallel_bandwidth: 3
-
+project: 'full-graph-mini-batch'
+observation_budget: 50
+parallel_bandwidth: 1

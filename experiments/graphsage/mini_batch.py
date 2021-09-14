@@ -1,4 +1,5 @@
 import argparse
+import os
 from timeit import default_timer
 from typing import Callable, Union
 
@@ -83,7 +84,8 @@ def validate(
 
     return time, loss, score
 
-def log_run(args: argparse.ArgumentParser) -> None:
+
+def run(args: argparse.ArgumentParser, experiment=None) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -93,30 +95,43 @@ def log_run(args: argparse.ArgumentParser) -> None:
         self_loop=args.graph_self_loop,
     )
 
+    print(f'{torch.median(g.in_degrees()).item() = }')
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    run.params.setdefaults({
-        'lr': args.lr,
-        'hidden_feats': args.hidden_feats,
-        'num_layers': args.num_layers,
-        'aggregator_type': args.aggregator_type,
-        'batch_norm': int(args.batch_norm),
-        'activation': args.activation,
-        'input_dropout': args.input_dropout,
-        'dropout': args.dropout,
-        'batch_size': args.batch_size,
-    })
+    if experiment is not None:
+        assignments = experiment.suggestions().create().assignments
 
-    fanouts = ','.join([str((i+1)*5) for i in range(args.num_layers)])
-    fanouts = utils.set_sigopt_fanouts(fanouts, as_metadata=True)
-    fanouts = [(i+1) * 5 for i in range(args.num_layers)]
+        fanouts = [assignments[f'layer_{i + 1}_fanout'] for i in range(int(assignments['num_layers']))]
+        batch_size = assignments['batch_size']
+        lr = assignments['lr']
+        hidden_feats = assignments['hidden_feats']
+        num_layers = int(assignments['num_layers'])
+        aggregator_type = assignments['aggregator_type']
+        batch_norm = bool(assignments['batch_norm'])
+        activation = assignments['activation']
+        input_dropout = assignments['input_dropout']
+        dropout = assignments['dropout']
+
+        print(assignments)
+    else:
+        fanouts = [int(i) for i in args.fanouts.split(',')]
+        batch_size = args.batch_size
+        lr = args.lr
+        hidden_feats = args.hidden_feats
+        num_layers = args.num_layers
+        aggregator_type = args.aggregator_type
+        batch_norm = args.batch_norm
+        activation = args.activation
+        input_dropout = args.input_dropout
+        dropout = args.dropout
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
         g,
         train_idx,
         sampler,
-        batch_size=run.params.batch_size,
+        batch_size=batch_size,
         shuffle=True,
         drop_last=False,
         num_workers=4,
@@ -127,18 +142,16 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-    print(f'aggregator type = {run.params.aggregator_type}')
-
     model = GraphSAGE(
         in_feats,
-        run.params.hidden_feats,
+        hidden_feats,
         out_feats,
-        run.params.num_layers,
-        aggregator_type=run.params.aggregator_type,
-        batch_norm=bool(run.params.batch_norm),
-        input_dropout=run.params.input_dropout,
-        dropout=run.params.dropout,
-        activation=activations[run.params.activation],
+        num_layers,
+        aggregator_type=aggregator_type,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        dropout=dropout,
+        activation=activations[activation],
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -146,7 +159,7 @@ def log_run(args: argparse.ArgumentParser) -> None:
     else:
         loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=run.params.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
@@ -221,9 +234,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--create-experiment', default=False,
-                           action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--experiment-id', default=None, type=int)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
+    argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -253,17 +265,25 @@ if __name__ == '__main__':
 
     if args.download_dataset:
         utils.download_dataset(args.dataset)
-    if args.create_experiment:
-        import yaml
-        exp_meta = yaml.load(open('./mini_batch_experiment.yml'), Loader=yaml.FullLoader)
-        experiment = sigopt.create_experiment(**exp_meta)
-    elif args.experiment_id:
-        experiment = sigopt.get_experiment(args.experiment_id)
-    else:
-        print("No experiment ID given and not creating experiment")
-        exit
 
-    while not experiment.is_finished():
-        with experiment.create_run() as run:
-            log_run(args)
-        experiment = sigopt.get_experiment(args.experiment_id)
+    if args.experiment_id is not None:
+        if args.sigopt_api_token is not None:
+            token = args.sigopt_api_token
+        else:
+            token = os.getenv('SIGOPT_API_TOKEN')
+
+            if token is None:
+                raise ValueError(
+                    'SigOpt API token is not provided. Please provide it by '
+                    '--sigopt-api-token argument or set '
+                    'SIGOPT_API_TOKEN environment variable.'
+                )
+        
+        experiment = sigopt.Connection(token).experiments(args.experiment_id)
+
+        print(experiment.fetch().progress)
+
+    # war = lambda: experiment.fetch().progress.observation_count < experiment.fetch().observation_budget
+
+    while experiment.fetch().progress.observation_count < experiment.fetch().observation_budget:
+        run(args, experiment)

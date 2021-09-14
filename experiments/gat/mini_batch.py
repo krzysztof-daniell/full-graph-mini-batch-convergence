@@ -83,7 +83,8 @@ def validate(
 
     return time, loss, score
 
-def log_run(args: argparse.ArgumentParser) -> None:
+
+def log_run(args: argparse.ArgumentParser, sigopt_run: sigopt.LiveRunContext = None) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -287,7 +288,8 @@ if __name__ == '__main__':
 
     if args.create_experiment:
         import yaml
-        exp_meta = yaml.load(open('./mini_batch_experiment.yml'), Loader=yaml.FullLoader)
+        exp_meta = yaml.load(
+            open('./mini_batch_experiment.yml'), Loader=yaml.FullLoader)
         experiment = sigopt.create_experiment(**exp_meta)
     elif args.experiment_id:
         experiment = sigopt.get_experiment(args.experiment_id)
@@ -299,4 +301,3 @@ if __name__ == '__main__':
         with experiment.create_run() as run:
             log_run(args)
         experiment = sigopt.get_experiment(args.experiment_id)
-
