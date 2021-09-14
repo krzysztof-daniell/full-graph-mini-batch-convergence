@@ -1,5 +1,6 @@
 import os
 import shutil
+import psutil
 from copy import deepcopy
 from typing import Union
 
@@ -377,18 +378,33 @@ def process_dataset(
     return dataset, evaluator, g, train_idx, valid_idx, test_idx
 
 
-def set_sigopt_fanouts(fanouts: str) -> list[int]:
+
+def set_sigopt_fanouts(fanouts: str, as_metadata: bool = True) -> list[int]:
     result = [int(i) for i in fanouts.split(',')]
 
     for i in reversed(range(len(result))):
-        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': result[i]})
-
+        k,v = f'layer_{i + 1}_fanout', result[i]
+        sigopt.log_metadata(k,v) if as_metadata else sigopt.params.setdefault(k,v)
         result.pop(i)
 
-    for i in range(sigopt.params.num_layers):
-        result.append(sigopt.params[f'layer_{i + 1}_fanout'])
+    if not as_metadata:
+        for i in range(sigopt.params.num_layers):
+            result.append(sigopt.params[f'layer_{i + 1}_fanout'])
 
     return result
+
+def log_system_info() -> None: 
+  
+    # https://psutil.readthedocs.io/en/latest/#processes
+    process = psutil.Process()
+    virtual_memory = psutil.virtual_memory()
+    sigopt.log_metadata("Python version", sys.version.split()[0])
+    sigopt.log_metadata("Operating System", sys.platform)
+    sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
+    # sigopt.log_metadata("Process CPU Percent", process.cpu_percent())
+    sigopt.log_metadata("psutil.virtual_memory().total", psutil._common.bytes2human(virtual_memory.total))
+    sigopt.log_metadata("psutil.virtual_memory().available", psutil._common.bytes2human(virtual_memory.available))
+    # sigopt.log_metadata("Virtual Memory Percent", virtual_memory.percent)
 
 
 def get_evaluation_score(

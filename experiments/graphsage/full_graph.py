@@ -73,7 +73,7 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser) -> None:
+def log_run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -104,33 +104,14 @@ def run(args: argparse.ArgumentParser) -> None:
     model = GraphSAGE(
         in_feats,
         sigopt.params.hidden_feats,
-        # 12,
         out_feats,
         sigopt.params.num_layers,
-        # 2,
         aggregator_type=sigopt.params.aggregator_type,
-        # aggregator_type="mean",
         batch_norm=bool(sigopt.params.batch_norm),
-        # batch_norm=True,
         input_dropout=sigopt.params.input_dropout,
-        # input_dropout=.1,
         dropout=sigopt.params.dropout,
-        # dropout=.5,
         activation=activations[sigopt.params.activation],
-        # activation=F.leaky_relu
     ).to(device)
-
-    # model = GraphSAGE(
-    #     in_feats,
-    #     sigopt.params.hidden_feats * 16,  # int range(4, 64)
-    #     out_feats,
-    #     sigopt.params.num_layers,  # int range(2, 5)
-    #     aggregator_types[f'{sigopt.params.aggregator_type}'],
-    #     bool(sigopt.params.batch_norm),
-    #     activations[f'{sigopt.params.activation}'],
-    #     sigopt.params.input_dropout * 0.05,  # int range(0, 19)
-    #     sigopt.params.dropout * 0.05,  # int range(0, 19)
-    # ).to(device)
 
     if args.dataset == 'ogbn-proteins':
         loss_function = nn.BCEWithLogitsLoss().to(device)
@@ -138,7 +119,6 @@ def run(args: argparse.ArgumentParser) -> None:
         loss_function = nn.CrossEntropyLoss().to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
@@ -207,6 +187,9 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--create-experiment', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--experiment-id', default=None, type=int)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -234,5 +217,17 @@ if __name__ == '__main__':
 
     if args.download_dataset:
         utils.download_dataset(args.dataset)
+    if args.create_experiment:
+        import yaml
+        exp_meta = yaml.load(open('./full_graph_experiment.yml'), Loader=yaml.FullLoader)
+        experiment = sigopt.create_experiment(**exp_meta)
+    elif args.experiment_id:
+        experiment = sigopt.get_experiment(args.experiment_id)
+    else:
+        print("No experiment ID given and not creating experiment")
+        exit
 
-    run(args)
+    while not experiment.is_finished():
+        with experiment.create_run() as run:
+            log_run(args)
+        experiment = sigopt.get_experiment(args.experiment_id)

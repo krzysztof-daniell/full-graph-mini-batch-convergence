@@ -245,6 +245,9 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--create-experiment', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--experiment-id', default=None, type=int)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
@@ -273,4 +276,18 @@ if __name__ == '__main__':
     if args.download_dataset:
         utils.download_dataset(args.dataset)
 
-    run(args)
+    if args.create_experiment:
+        import yaml
+        exp_meta = yaml.load(open('./full_graph_experiment.yml'), Loader=yaml.FullLoader)
+        experiment = sigopt.create_experiment(**exp_meta)
+    elif args.experiment_id:
+        experiment = sigopt.get_experiment(args.experiment_id)
+    else:
+        print("No experiment ID given and not creating experiment")
+        exit
+
+    while not experiment.is_finished():
+        with experiment.create_run() as run:
+            log_run(args)
+        experiment = sigopt.get_experiment(args.experiment_id)
+

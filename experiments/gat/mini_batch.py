@@ -83,8 +83,7 @@ def validate(
 
     return time, loss, score
 
-
-def run(args: argparse.ArgumentParser) -> None:
+def log_run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -242,6 +241,9 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--create-experiment', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--experiment-id', default=None, type=int)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -283,4 +285,18 @@ if __name__ == '__main__':
     if args.download_dataset:
         utils.download_dataset(args.dataset)
 
-    run(args)
+    if args.create_experiment:
+        import yaml
+        exp_meta = yaml.load(open('./mini_batch_experiment.yml'), Loader=yaml.FullLoader)
+        experiment = sigopt.create_experiment(**exp_meta)
+    elif args.experiment_id:
+        experiment = sigopt.get_experiment(args.experiment_id)
+    else:
+        print("No experiment ID given and not creating experiment")
+        exit
+
+    while not experiment.is_finished():
+        with experiment.create_run() as run:
+            log_run(args)
+        experiment = sigopt.get_experiment(args.experiment_id)
+
