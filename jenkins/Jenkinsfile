@@ -1,0 +1,213 @@
+void startAWSInstances(String instanceIDs) {
+    sh 'aws ec2 start-instances --instance-ids ${instanceIDs}'
+}
+
+void stopAWSInstances(String instanceIDs) {
+    sh 'aws ec2 stop-instances --instance-ids ${instanceIDs}'
+}
+
+void runContainer(
+    String containerName, 
+    String imageName,
+    String availableNumaCores,
+    String availableNumaMemory,
+    String datasetsVolume
+) {
+    sh """docker run \
+        -d \
+        -it \
+        --ipc host \
+        --cpuset-cpus ${availableNumaCores} \
+        --cpuset-mems ${availableNumaMemory} \
+        --volume ${datasetsVolume}:/datasets \
+        --name ${containerName} \
+        ${imageName}
+    """
+}
+
+void turnOffHyperthreading() {
+    sh """docker exec \
+        -w /full-graph-mini-batch-convergence/experiments ${containerName} \
+        -c bash \
+            'bash turn_off_hyperthreading.sh'
+    """
+}
+
+void cloneRepository(
+    String containerName,
+    String repositoryURL,
+    String machineUserCredentials
+) {
+    sh """docker exec ${containerName} -c bash
+        'git clone https://${machineUserCredentials}@${repositoryURL.minus("https://")}'
+    """
+}
+
+String createExperiment(
+    String containerName, 
+    String machineUserCredentials, 
+    String model,
+    String dataset,
+    String trainingMethod,
+    String optimizationTarget
+) {
+    script {
+        String experimentID = sh (
+            returnStdout: true,
+            script: """docker exec
+                -w /full-graph-mini-batch-convergence/experiments ${containerName} \
+                -c bash \
+                    'python create_experiment.py \
+                        --model ${model} \
+                        --dataset ${dataset} \
+                        --training-method ${trainingMethod} \
+                        --optimization-target ${optimizationTarget}'
+            """
+        ).trim()
+    }
+
+    sh 'echo "Experiment ID: ${experimentID}"'
+
+    return experimentID
+}
+
+void runExperiment(
+    String containerName,
+    String sigoptAPIToken,
+    String experimentID,
+    String model,
+    String dataset,
+    String trainingMethod,
+    String experimentTarget
+) {
+    sh """docker exec \
+        -w /full-graph-mini-batch-convergence/experiments/ ${containerName} \
+        -c bash \
+            'python run_experiment.py \
+                --dataset ${dataset} \
+                --dataset-root /datasets \
+                --sigopt-api-token ${sigoptAPIToken} \
+                --experiment-id ${experimentID} \
+                --model ${model} \
+                --dataset ${dataset} \
+                --training-method ${trainingMethod} \
+                --experiment-target ${experimentTarget}'
+    """
+}
+
+pipeline {
+    agent any
+    environment {
+        REPOSITORY_URL = 'https://github.com/ksadowski13/full-graph-mini-batch-convergence.git'
+
+        IMAGE_NAME = 'dgl-sigopt'
+        DATASET_VOLUME = '/home/jenkins/volumes/datasets'
+
+        NODE_1_CORES = '0-23'
+        NODE_1_MEMORY = '0'
+        NODE_2_CORES = '24-47'
+        NODE_2_MEMORY = '1'
+    }
+    parameters {
+        string(
+            name: 'EXPERIMENT_ID',
+            description: 'Experiment ID (if not provided, new experiment will be created)'
+        )
+
+        choice(
+            name: 'MODEL',
+            choices: ['gat', 'graphsage', 'rgcn'],
+            description: 'Model'
+        )
+        choice(
+            name: 'DATASET',
+            choices: ['ogbn-arxiv', 'ogbn-mag', 'ogbn-products', 'ogbn-proteins'],
+            description: 'Dataset'
+        )
+        choice(
+            name: 'TRAINING_METHOD',
+            choices: ['mini-batch', 'full-graph'],
+            description: 'Training Method'
+        )
+        choice(
+            name: 'OPTIMIZATION_TARGET',
+            choices: ['accuracy', 'speed'],
+            description: 'Optimization Target'
+        )
+    }
+    stages {
+        stage('Run Containers') {
+            parallel {
+                stage('Machine 1') {
+                    agent { label '224' }
+                    steps {
+                        runContainer(
+                            'dgl-sigopt-node-1', 
+                            env.IMAGE_NAME,
+                            env.NODE_1_CORES,
+                            env.NODE_1_MEMORY,
+                            env.DATASET_VOLUME
+                        )
+
+                        runContainer(
+                            'dgl-sigopt-node-2', 
+                            env.IMAGE_NAME,
+                            env.NODE_2_CORES,
+                            env.NODE_2_MEMORY,
+                            env.DATASET_VOLUME
+                        )
+                    }
+                }
+                stage('Machine 2') {
+                    agent { label '226' }
+                    steps {
+                        runContainer(
+                            'dgl-sigopt-node-1', 
+                            env.IMAGE_NAME,
+                            env.NODE_1_CORES,
+                            env.NODE_1_MEMORY,
+                            env.DATASET_VOLUME
+                        )
+
+                        runContainer(
+                            'dgl-sigopt-node-2',
+                            env.IMAGE_NAME,
+                            env.NODE_2_CORES,
+                            env.NODE_2_MEMORY,
+                            env.DATASET_VOLUME
+                        )
+                    }
+                }
+            }
+        }
+        stage('Setup Experiment') {
+            // TODO: Create experiment on machine 1
+
+            steps {
+                script {
+                    if (!env.EXPERIMENT_ID) {
+                        withCredentials([
+                            usernameColonPassword(
+                                credentialsId: 'machine-user-credentials', 
+                                variable: 'machineUserCredentials'
+                            )
+                        ]) {
+                            env.EXPERIMENT_ID = createExperiment(
+                                env.IMAGE_NAME, machineUserCredentials)
+                        }
+                    }
+                }
+            }
+        }
+        stage('Orchestrate Experiment') {
+            // TODO: Run experiments in paralell
+            }
+        }
+    }
+    post {
+        always {
+            // TODO: Stop and remove containers
+            }
+        }
+    }
+}
