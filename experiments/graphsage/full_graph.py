@@ -1,4 +1,5 @@
 import argparse
+import os
 from timeit import default_timer
 from typing import Callable
 
@@ -11,7 +12,6 @@ from ogb.nodeproppred import Evaluator
 
 import utils
 from model import GraphSAGE
-
 
 def train(
     model: nn.Module,
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     if args.download_dataset:
         utils.download_dataset(args.dataset)
 
-   if args.experiment_id is not None:
+    if args.experiment_id is not None:
         if args.sigopt_api_token is not None:
             token = args.sigopt_api_token
         else:
