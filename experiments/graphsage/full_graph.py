@@ -73,7 +73,7 @@ def validate(
     return time, loss, score
 
 
-def log_run(args: argparse.ArgumentParser) -> None:
+def run(args: argparse.ArgumentParser) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -85,16 +85,27 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    run.params.setdefaults({
-        'lr': args.lr,
-        'hidden_feats': args.hidden_feats,
-        'num_layers': args.num_layers,
-        'aggregator_type': args.aggregator_type,
-        'batch_norm': int(args.batch_norm),
-        'activation': args.activation,
-        'input_dropout': args.input_dropout,
-        'dropout': args.dropout,
-    })
+    if experiment is not None:
+        suggestion = experiment.suggestions().create()
+        assignments = suggestion.assignments
+        lr = assignments['lr']
+        hidden_feats = assignments['hidden_feats']
+        num_layers = int(assignments['num_layers'])
+        aggregator_type = assignments['aggregator_type']
+        batch_norm = bool(assignments['batch_norm'])
+        activation = assignments['activation']
+        input_dropout = assignments['input_dropout']
+        dropout = assignments['dropout']
+        print(assignments)
+    else:
+        lr = args.lr
+        hidden_feats = args.hidden_feats
+        num_layers = args.num_layers
+        aggregator_type = args.aggregator_type
+        batch_norm = args.batch_norm
+        activation = args.activation
+        input_dropout = args.input_dropout
+        dropout = args.dropout
 
     in_feats = g.ndata['feat'].shape[-1]
     out_feats = dataset.num_classes
@@ -103,14 +114,14 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     model = GraphSAGE(
         in_feats,
-        run.params.hidden_feats,
+        hidden_feats,
         out_feats,
-        run.params.num_layers,
-        aggregator_type=run.params.aggregator_type,
-        batch_norm=bool(run.params.batch_norm),
-        input_dropout=run.params.input_dropout,
-        dropout=run.params.dropout,
-        activation=activations[run.params.activation],
+        num_layers,
+        aggregator_type=aggregator_type,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        dropout=dropout,
+        activation=activations[activation],
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -155,29 +166,37 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
             break
 
-    if args.test_validation:
-        model.load_state_dict(checkpoint.best_epoch_model_parameters)
+    if experiment is not None:
+        if args.test_validation:
+            model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
-        test_time, test_loss, test_score = validate(
-            model, loss_function, evaluator, g, test_idx)
+            test_time, test_loss, test_score = validate(
+                model, loss_function, evaluator, g, test_idx)
 
-        print(
-            f'Test Loss: {test_loss:.2f} '
-            f'Test Score: {test_score:.4f} '
-            f'Test Epoch Time: {test_time:.2f}'
-        )
+            print(
+                f'Test Loss: {test_loss:.2f} '
+                f'Test Score: {test_score:.4f} '
+                f'Test Epoch Time: {test_time:.2f}'
+            )
 
-        utils.log_metrics_to_sigopt(
-            checkpoint,
-            'GraphSAGE',
-            args.dataset,
-            test_loss,
-            test_score,
-            test_time,
-        )
-    else:
-        utils.log_metrics_to_sigopt(checkpoint, 'GraphSAGE', args.dataset)
-
+            utils.log_metrics_to_sigopt(
+                experiment,
+                suggestion,
+                checkpoint,
+                'GraphSAGE',
+                args.dataset,
+                test_loss,
+                test_score,
+                test_time,
+            )
+        else:
+            utils.log_metrics_to_sigopt(
+                experiment,
+                suggestion,
+                checkpoint, 
+                'GraphSAGE', 
+                args.dataset
+            )
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE Optimization')
@@ -187,9 +206,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--create-experiment', default=False,
-                           action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--experiment-id', default=None, type=int)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
+    argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -217,17 +235,23 @@ if __name__ == '__main__':
 
     if args.download_dataset:
         utils.download_dataset(args.dataset)
-    if args.create_experiment:
-        import yaml
-        exp_meta = yaml.load(open('./full_graph_experiment.yml'), Loader=yaml.FullLoader)
-        experiment = sigopt.create_experiment(**exp_meta)
-    elif args.experiment_id:
-        experiment = sigopt.get_experiment(args.experiment_id)
-    else:
-        print("No experiment ID given and not creating experiment")
-        exit
 
-    while not experiment.is_finished():
-        with experiment.create_run() as run:
-            log_run(args)
-        experiment = sigopt.get_experiment(args.experiment_id)
+   if args.experiment_id is not None:
+        if args.sigopt_api_token is not None:
+            token = args.sigopt_api_token
+        else:
+            token = os.getenv('SIGOPT_API_TOKEN')
+
+            if token is None:
+                raise ValueError(
+                    'SigOpt API token is not provided. Please provide it by '
+                    '--sigopt-api-token argument or set '
+                    'SIGOPT_API_TOKEN environment variable.'
+                )
+
+        experiment = sigopt.Connection(token).experiments(args.experiment_id)
+
+        while utils.is_experiment_finished(experiment):
+            run(args, experiment)
+    else:
+        run(args)
