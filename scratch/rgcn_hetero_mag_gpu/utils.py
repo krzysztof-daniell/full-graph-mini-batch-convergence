@@ -117,9 +117,9 @@ class Callback:
             if isinstance(model, dict):
                 for name, current_model in model.items():
                     self._model_parameters[name] = deepcopy(
-                        current_model.state_dict())
+                        current_model.to('cpu').state_dict())
             else:
-                self._model_parameters = deepcopy(model.state_dict())
+                self._model_parameters = deepcopy(model.to('cpu').state_dict())
 
             self._lookback = 0
         else:
