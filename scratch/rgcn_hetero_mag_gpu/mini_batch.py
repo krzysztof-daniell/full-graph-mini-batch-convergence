@@ -19,9 +19,9 @@ def train(
     embedding_optimizer: torch.optim.Optimizer,
     model_optimizer: torch.optim.Optimizer,
     loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    dataloader: dgl.dataloading.NodeDataLoader,
     labels: torch.Tensor,
     predict_category: str,
+    dataloader: dgl.dataloading.NodeDataLoader,
 ) -> Tuple[float]:
     model.train()
 
@@ -29,7 +29,7 @@ def train(
     total_accuracy = 0
 
     t0 = default_timer()
-    utils.set_device(device, embedding_layer, model, loss_function, labels)
+    utils.set_device(device, embedding_layer, model, loss_function)
     t1 = default_timer()
 
     print(f'Train copying time to device: {t1 - t0}')
@@ -44,9 +44,9 @@ def train(
         out_nodes = out_nodes[predict_category].to(device)
         blocks = [block.to(device) for block in blocks]
 
-        batch_labels = labels[out_nodes]
+        batch_labels = labels[out_nodes].to(device)
 
-        embedding = embedding_layer(device=device, in_nodes=in_nodes)
+        embedding = embedding_layer(in_nodes=in_nodes, device=device)
         logits = model(blocks, embedding)[predict_category]
 
         loss = loss_function(logits, batch_labels)
@@ -79,13 +79,14 @@ def validate(
     hg: dgl.DGLHeteroGraph,
     labels: torch.Tensor,
     predict_category: str,
-    mask: torch.Tensor,
+    dataloader: dgl.dataloading.NodeDataLoader = None,
+    mask: torch.Tensor = None,
 ) -> Tuple[float]:
     embedding_layer.eval()
     model.eval()
 
     t0 = default_timer()
-    utils.set_device(device, embedding_layer, model, loss_function, labels)
+    utils.set_device(device, embedding_layer, model, loss_function)
     t1 = default_timer()
 
     print(f'Valid copying time to device: {t1 - t0}')
@@ -95,21 +96,48 @@ def validate(
     valid_labels = labels[mask]
 
     with torch.no_grad():
-        embedding = embedding_layer(device=device)
-        logits = model(hg, embedding)[predict_category][mask]
+        if dataloader is not None:
+            total_loss = 0
+            total_accuracy = 0
 
-        loss = loss_function(logits, valid_labels)
+            for step, (in_nodes, out_nodes, blocks) in enumerate(dataloader):
+                in_nodes = {rel: nid.to(device)
+                            for rel, nid in in_nodes.items()}
+                out_nodes = out_nodes[predict_category].to(device)
+                blocks = [block.to(device) for block in blocks]
 
-        indices = logits.argmax(dim=-1)
-        correct = torch.sum(indices == valid_labels)
-        accuracy = correct.item() / len(valid_labels)
+                batch_labels = labels[out_nodes].to(device)
+
+                embedding = embedding_layer(in_nodes=in_nodes, device=device)
+                logits = model(blocks, embedding)[predict_category]
+
+                loss = loss_function(logits, batch_labels)
+
+                indices = logits.argmax(dim=-1)
+                correct = torch.sum(indices == batch_labels)
+                accuracy = correct.item() / len(batch_labels)
+
+                total_loss += loss.item()
+                total_accuracy += accuracy
+
+            total_loss /= step + 1
+            total_accuracy /= step + 1
+        else:
+            embedding = embedding_layer(device=device)
+            logits = model(hg, embedding)[predict_category][mask]
+
+            total_loss = loss_function(logits, valid_labels)
+
+            indices = logits.argmax(dim=-1)
+            correct = torch.sum(indices == valid_labels)
+            total_accuracy = correct.item() / len(valid_labels)
+
+            total_loss = total_loss.item()
 
     stop = default_timer()
     time = stop - start
 
-    loss = loss.item()
-
-    return time, loss, accuracy
+    return time, total_loss, total_accuracy
 
 
 def run(args: argparse.ArgumentParser) -> None:
@@ -125,20 +153,53 @@ def run(args: argparse.ArgumentParser) -> None:
     training_device = torch.device('cuda' if args.gpu_training else 'cpu')
     inference_device = torch.device('cuda' if args.gpu_inference else 'cpu')
 
-    sampler = dgl.dataloading.MultiLayerNeighborSampler(
-        [int(fanout) for fanout in args.fanouts.split(',')])
+    fanouts = [int(fanout) for fanout in args.fanouts.split(',')]
+
+    train_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
         hg,
         {predict_category: train_idx},
-        sampler,
+        train_sampler,
         batch_size=args.batch_size,
         shuffle=True,
         drop_last=False,
         num_workers=args.num_workers,
     )
 
+    if args.gpu_inference:
+        valid_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(
+            args.num_layers)
+        valid_dataloader = dgl.dataloading.NodeDataLoader(
+            hg,
+            {predict_category: valid_idx},
+            valid_sampler,
+            batch_size=args.eval_batch_size,
+            shuffle=True,
+            drop_last=False,
+            num_workers=args.num_workers,
+        )
+
+        if args.test_validation:
+            test_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(
+                args.num_layers)
+            test_dataloader = dgl.dataloading.NodeDataLoader(
+                hg,
+                {predict_category: test_idx},
+                test_sampler,
+                batch_size=args.eval_batch_size,
+                shuffle=True,
+                drop_last=False,
+                num_workers=args.num_workers,
+            )
+    else:
+        valid_dataloader = None
+
+        if args.test_validation:
+            test_dataloader = None
+
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
+
     num_nodes = {}
     node_feats = {}
 
@@ -188,6 +249,8 @@ def run(args: argparse.ArgumentParser) -> None:
     print('## Training started ##')
 
     for epoch in range(args.num_epochs):
+        start = default_timer()
+
         train_time, train_loss, train_accuracy = train(
             embedding_layer,
             model,
@@ -195,9 +258,9 @@ def run(args: argparse.ArgumentParser) -> None:
             embedding_optimizer,
             model_optimizer,
             loss_function,
-            train_dataloader,
             labels,
             predict_category,
+            train_dataloader,
         )
         valid_time, valid_loss, valid_accuracy = validate(
             embedding_layer,
@@ -207,8 +270,13 @@ def run(args: argparse.ArgumentParser) -> None:
             hg,
             labels,
             predict_category,
+            valid_dataloader,
             valid_idx,
         )
+
+        stop = default_timer()
+        
+        print(f'Full epoch time: {stop - start:.2f}')
 
         checkpoint.create(
             epoch,
@@ -261,6 +329,7 @@ def run(args: argparse.ArgumentParser) -> None:
             hg,
             labels,
             predict_category,
+            test_dataloader,
             test_idx,
         )
 
@@ -316,6 +385,7 @@ if __name__ == '__main__':
     argparser.set_defaults(self_loop=True)
     argparser.add_argument('--fanouts', default='25,20', type=str)
     argparser.add_argument('--batch-size', default=1024, type=int)
+    argparser.add_argument('--eval-batch-size', default=16384, type=int)
     argparser.add_argument('--num-workers', default=4, type=int)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',

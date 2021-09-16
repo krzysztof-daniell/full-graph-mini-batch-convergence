@@ -6,6 +6,83 @@ import torch
 import torch.nn as nn
 
 
+class RelGraphEmbedding(nn.Module):
+    def __init__(
+        self,
+        hg: dgl.DGLHeteroGraph,
+        embedding_size: int,
+        num_nodes: Dict[str, int],
+        node_feats: Dict[str, torch.Tensor],
+        node_feats_projection: bool = False,
+    ):
+        super().__init__()
+        self._hg = hg
+        self._node_feats = node_feats
+        self._node_feats_projection = node_feats_projection
+        self.node_embeddings = nn.ModuleDict()
+
+        if node_feats_projection:
+            self.embeddings = nn.ParameterDict()
+
+        for ntype in hg.ntypes:
+            if node_feats[ntype] is None:
+                node_embedding = nn.Embedding(
+                    num_nodes[ntype], embedding_size, sparse=True)
+                nn.init.uniform_(node_embedding.weight, -1, 1)
+
+                self.node_embeddings[ntype] = node_embedding
+            elif node_feats[ntype] is not None and node_feats_projection:
+                input_embedding_size = node_feats[ntype].shape[-1]
+                embedding = nn.Parameter(torch.Tensor(
+                    input_embedding_size, embedding_size))
+                nn.init.xavier_uniform_(embedding)
+
+                self.embeddings[ntype] = embedding
+
+    def forward(
+        self,
+        in_nodes: Dict[str, torch.Tensor] = None,
+        device: torch.device = None,
+    ) -> Dict[str, torch.Tensor]:
+        if in_nodes is not None:
+            x = {}
+
+            for ntype, nid in in_nodes.items():
+                if self._node_feats[ntype] is None:
+                    x[ntype] = self.node_embeddings[ntype](nid)
+                else:
+                    if device is not None:
+                        self._node_feats[ntype] = self._node_feats[ntype].to(
+                            device)
+
+                    if self._node_feats_projection:
+                        x[ntype] = self._node_feats[ntype][nid] @ self.embeddings[ntype]
+                    else:
+                        x[ntype] = self._node_feats[ntype][nid]
+        else:
+            x = {}
+
+            for ntype in self._hg.ntypes:
+                hg_nodes = self._hg.nodes(ntype)
+
+                if device is not None:  # TODO: Not needed if full-graph inference will be on cpu
+                    hg_nodes = hg_nodes.to(device)
+
+                if self._node_feats[ntype] is None:
+                    x[ntype] = self.node_embeddings[ntype](hg_nodes)
+                else:
+                    if device is not None:
+                        self._node_feats[ntype] = self._node_feats[ntype].to(
+                            device)
+
+                    if self._node_feats_projection:
+                        x[ntype] = self._node_feats[ntype] @ self.embeddings[ntype]
+                    else:
+                        x[ntype] = self._node_feats[ntype]
+
+        return x
+
+
 class RelGraphConvLayer(nn.Module):
     def __init__(
         self,
@@ -100,80 +177,6 @@ class RelGraphConvLayer(nn.Module):
         x = self._conv(hg, inputs, mod_kwargs=weight_dict)
         x = {ntype: self._apply_layers(ntype, h, inputs_dst)
              for ntype, h in x.items()}
-
-        return x
-
-
-class RelGraphEmbedding(nn.Module):
-    def __init__(
-        self,
-        hg: dgl.DGLHeteroGraph,
-        embedding_size: int,
-        num_nodes: Dict[str, int],
-        node_feats: Dict[str, torch.Tensor],
-        node_feats_projection: bool = False,
-    ):
-        super().__init__()
-        self._hg = hg
-        self._node_feats = node_feats
-        self._node_feats_projection = node_feats_projection
-        self.node_embeddings = nn.ModuleDict()
-
-        if node_feats_projection:
-            self.embeddings = nn.ParameterDict()
-
-        for ntype in hg.ntypes:
-            if node_feats[ntype] is None:
-                node_embedding = nn.Embedding(
-                    num_nodes[ntype], embedding_size, sparse=True)
-                nn.init.uniform_(node_embedding.weight, -1, 1)
-
-                self.node_embeddings[ntype] = node_embedding
-            elif node_feats[ntype] is not None and node_feats_projection:
-                input_embedding_size = node_feats[ntype].shape[-1]
-                embedding = nn.Parameter(torch.Tensor(
-                    input_embedding_size, embedding_size))
-                nn.init.xavier_uniform_(embedding)
-
-                self.embeddings[ntype] = embedding
-
-    def forward(
-        self,
-        device=None,
-        in_nodes: Dict[str, torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
-        if in_nodes is not None:
-            x = {}
-
-            for ntype, nid in in_nodes.items():
-                if self._node_feats[ntype] is None:
-                    x[ntype] = self.node_embeddings[ntype](nid)
-                else:
-                    if device is not None:
-                        self._node_feats[ntype] = self._node_feats[ntype].to(
-                            device)
-
-                    if self._node_feats_projection:
-                        x[ntype] = self._node_feats[ntype][nid] @ self.embeddings[ntype]
-                    else:
-                        x[ntype] = self._node_feats[ntype][nid]
-        else:
-            x = {}
-
-            for ntype in self._hg.ntypes:
-                hg_nodes = self._hg.nodes(ntype)
-
-                if self._node_feats[ntype] is None:
-                    x[ntype] = self.node_embeddings[ntype](hg_nodes)
-                else:
-                    if device is not None:
-                        self._node_feats[ntype] = self._node_feats[ntype].to(
-                            device)
-
-                    if self._node_feats_projection:
-                        x[ntype] = self._node_feats[ntype] @ self.embeddings[ntype]
-                    else:
-                        x[ntype] = self._node_feats[ntype]
 
         return x
 
