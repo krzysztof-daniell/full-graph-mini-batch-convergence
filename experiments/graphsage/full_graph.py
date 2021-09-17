@@ -73,7 +73,7 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser) -> None:
+def run(args: argparse.ArgumentParser, experiment=None) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(

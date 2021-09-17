@@ -1,45 +1,40 @@
-# full_graph_experiment.yml
-name: POC - rgcn mini batch 
+# ogbn_products_full_graph_accuracy.yml
+name: gat - ogbn-products - full-graph - accuracy
+conditionals:
+  - name: num_layers
+    values: ['2', '3', '4', '5']
 parameters: 
-  - name: model_lr
+  - name: lr
     type: double
-    transformation: log
     bounds:
-      min: 0.00001
-      max: 0.01
-  - name: embedding_lr
-    type: double
-    transformation: log
-    bounds:
-      min: 0.00001
-      max: 0.01
+      min: .0001
+      max: .05
   - name: hidden_feats
     type: int
     grid: [8, 16, 32, 64, 128, 256]
-  - name: num_bases
-    type: int
-    bounds:
-      min: 2
-      max: 4
-  - name: num_layers
+  - name: number_of_layers
     type: int
     bounds:
       min: 1
       max: 4
-  - name: norm
-    type: categorical
-    categorical_values: [both, none, right]
   - name: batch_norm
     type: int
     grid: [0, 1]
-  - name: activation 
-    type: categorical
-    categorical_values: [leaky_relu, relu]
   - name: input_dropout
     type: double
-    bounds: 
-      min: 0.0
-      max: 0.3
+    bounds:
+      min: 0.1
+      max: 0.5
+  - name: attn_dropout
+    type: double
+    bounds:
+      min: 0.1
+      max: 0.5
+  - name: edge_dropout
+    type: double
+    bounds:
+      min: 0.1
+      max: 0.5
   - name: dropout
     type: double
     bounds:
@@ -49,12 +44,23 @@ parameters:
       name: beta
       shape_a: 2
       shape_b: 3
-  - name: self_loop
+  - name: negative_slope
+    type: double
+    bounds: 
+      min: 0.1
+      max: 0.3
+  - name: residual
     type: int
     grid: [0, 1]
-  - name: batch_size
+  - name: activation
+    type: categorical
+    categorical_values: [leaky_relu, relu]
+  - name: use_attn_dst
     type: int
-    grid: [50, 100, 250, 500, 750, 1000]
+    grid: [0, 1]
+  - name: bias
+    type: int
+    grid: [0, 1]
 metrics:
   - name: best epoch 
     strategy: store
@@ -80,5 +86,5 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-budget: 50
-parallel_bandwidth: 3
+budget: 20
+parallel_bandwidth: 2

@@ -1,4 +1,5 @@
 import argparse
+import os
 from timeit import default_timer
 from typing import Callable
 
@@ -71,7 +72,7 @@ def validate(
 
     return time, loss, score
 
-def log_run(args: argparse.ArgumentParser) -> None:
+def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
     torch.manual_seed(args.seed)
 
@@ -84,35 +85,54 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    run.params.setdefaults({
-        'lr': args.lr,
-        'node_hidden_feats': args.node_hidden_feats,
-        'num_heads': args.num_heads,
-        'num_layers': args.num_layers,
-        'norm': args.norm,
-        'batch_norm': int(args.batch_norm),
-        'input_dropout': args.input_dropout,
-        'attn_dropout': args.attn_dropout,
-        'edge_dropout': args.edge_dropout,
-        'dropout': args.dropout,
-        'negative_slope': args.negative_slope,
-        'residual': int(args.residual),
-        'activation': args.activation,
-        'use_attn_dst': int(args.use_attn_dst),
-        'bias': int(args.bias),
-    })
-
+    if experiment is not None:
+        suggestion = experiment.suggestions().create()
+        assignments = suggestion.assignments
+        lr = assignments['lr']
+        node_hidden_feats = assignments['node_hidden_feats']
+        num_heads = assignments['num_heads']
+        num_layers = assignments['num_layers']
+        norm = assignments['norm']
+        batch_norm = bool(assignments['batch_norm'])
+        input_dropout = assignments['input_dropout']
+        attn_dropout = assignments['attn_dropout']
+        edge_dropout = assignments['edge_dropout']
+        dropout = assignments['dropout'] 
+        negative_slope = assignments['negative_slope']
+        residual = bool(assignments['residual'])
+        activation = assignments['activation']
+        use_attn_dst = bool(assignments['use_attn_dst'])
+        bias = bool(assignments['bias'])
+    else:
+        lr = args.lr
+        node_hidden_feats = args.node_hidden_feats
+        num_heads = args.num_heads
+        num_layers = args.num_layers
+        norm = args.norm
+        batch_norm = int(args.batch_norm)
+        input_dropout = args.input_dropout
+        attn_dropout = args.attn_dropout
+        edge_dropout = args.edge_dropout
+        dropout = args.dropout 
+        negative_slope = args.negative_slope
+        residual = int(args.residual)
+        activation = args.activation
+        use_attn_dst = int(args.use_attn_dst)
+        bias = int(args.bias)
+        
     node_in_feats = g.ndata['feat'].shape[-1]
 
     if args.dataset == 'ogbn-proteins':
         if args.edge_hidden_feats > 0:
-            run.params.setdefaults(
-                {'edge_hidden_feats': args.edge_hidden_feats})
+            # run.params.setdefaults(
+            #     {'edge_hidden_feats': args.edge_hidden_feats})
+            edge_hidden_feats = assignments['edge_hidden_feats']
         else:
-            run.params.setdefaults({'edge_hidden_feats': 16})
+            #run.params.setdefaults({'edge_hidden_feats': 16})
+            edge_hidden_feats = 16
 
         edge_in_feats = g.edata['feat'].shape[-1]
-        edge_hidden_feats = run.params.edge_hidden_feats
+        #edge_hidden_feats = run.params.edge_hidden_feats
     else:
         edge_in_feats = 0
         edge_hidden_feats = 0
@@ -124,22 +144,22 @@ def log_run(args: argparse.ArgumentParser) -> None:
     model = GAT(
         node_in_feats,
         edge_in_feats,
-        run.params.node_hidden_feats,
+        node_hidden_feats,
         edge_hidden_feats,
         out_feats,
-        run.params.num_heads,
-        run.params.num_layers,
-        norm=run.params.norm,
-        batch_norm=bool(run.params.batch_norm),
-        input_dropout=run.params.input_dropout,
-        attn_dropout=run.params.attn_dropout,
-        edge_dropout=run.params.edge_dropout,
-        dropout=run.params.dropout,
-        negative_slope=run.params.negative_slope,
-        residual=bool(run.params.residual),
-        activation=activations[run.params.activation],
-        use_attn_dst=bool(run.params.use_attn_dst),
-        bias=bool(run.params.bias),
+        num_heads,
+        num_layers,
+        norm=norm,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        attn_dropout=attn_dropout,
+        edge_dropout=edge_dropout,
+        dropout=dropout,
+        negative_slope=negative_slope,
+        residual=residual,
+        activation=activations[activation],
+        use_attn_dst=use_attn_dst,
+        bias=bias,
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -147,7 +167,7 @@ def log_run(args: argparse.ArgumentParser) -> None:
     else:
         loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=run.params.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
@@ -197,6 +217,8 @@ def log_run(args: argparse.ArgumentParser) -> None:
         )
 
         utils.log_metrics_to_sigopt(
+            experiment,
+            suggestion,
             checkpoint,
             'GAT',
             args.dataset,
@@ -205,8 +227,13 @@ def log_run(args: argparse.ArgumentParser) -> None:
             test_time,
         )
     else:
-        utils.log_metrics_to_sigopt(checkpoint, 'GAT NS', args.dataset)
-
+        utils.log_metrics_to_sigopt(
+            experiment,
+            suggestion,
+            checkpoint, 
+            'GAT NS', 
+            args.dataset
+        )
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GAT NS Optimization')
@@ -216,9 +243,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--create-experiment', default=False,
-                           action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--experiment-id', default=None, type=int)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
+    argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -257,17 +283,23 @@ if __name__ == '__main__':
 
     if args.download_dataset:
         utils.download_dataset(args.dataset)
-    if args.create_experiment:
-        import yaml
-        exp_meta = yaml.load(open('./full_graph_experiment.yml'), Loader=yaml.FullLoader)
-        experiment = sigopt.create_experiment(**exp_meta)
-    elif args.experiment_id:
-        experiment = sigopt.get_experiment(args.experiment_id)
-    else:
-        print("No experiment ID given and not creating experiment")
-        exit
 
-    while not experiment.is_finished():
-        with experiment.create_run() as run:
-            log_run(args)
-        experiment = sigopt.get_experiment(args.experiment_id)
+    if args.experiment_id is not None:
+        if args.sigopt_api_token is not None:
+            token = args.sigopt_api_token
+        else:
+            token = os.getenv('SIGOPT_API_TOKEN')
+
+            if token is None:
+                raise ValueError(
+                    'SigOpt API token is not provided. Please provide it by '
+                    '--sigopt-api-token argument or set '
+                    'SIGOPT_API_TOKEN environment variable.'
+                )
+
+        experiment = sigopt.Connection(token).experiments(args.experiment_id)
+
+        while utils.is_experiment_finished(experiment):
+            run(args, experiment)
+    else:
+        run(args)

@@ -1,4 +1,5 @@
 import argparse
+import os
 from collections.abc import Callable
 from timeit import default_timer
 
@@ -84,7 +85,7 @@ def validate(
     return time, loss, score
 
 
-def log_run(args: argparse.ArgumentParser) -> None:
+def run(args: argparse.ArgumentParser, experiment=None) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -96,19 +97,34 @@ def log_run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    run.params.setdefaults({
-        'embedding_lr': args.embedding_lr,
-        'model_lr': args.model_lr,
-        'hidden_feats': args.hidden_feats,
-        'num_bases': args.num_bases,
-        'num_layers': args.num_layers,
-        'norm': args.norm,
-        'batch_norm': int(args.batch_norm),
-        'activation': args.activation,
-        'input_dropout': args.input_dropout,
-        'dropout': args.dropout,
-        'self_loop': int(args.self_loop),
-    })
+    if experiment is not None:
+        suggestion = experiment.suggestions().create()
+        assignments = suggestion.assignments
+    
+        embedding_lr = assignments['embedding_lr']
+        model_lr = assignments['model_lr']
+        hidden_feats = assignments['hidden_feats']
+        num_bases = assignments['num_bases']
+        num_layers = assignments['num_layers']
+        norm = assignments['norm']
+        batch_norm = bool(assignments['batch_norm'])
+        activation = assignments['activation']
+        input_dropout = assignments['input_dropout']
+        dropout = assignments['dropout']
+        self_loop = bool(assignments['self_loop'])
+    else: 
+        embedding_lr = args.embedding_lr
+        model_lr = args.model_lr
+        hidden_feats = args.hidden_feats
+        num_bases = args.num_bases
+        num_layers = args.num_layers
+        norm = args.norm
+        batch_norm = int(args.batch_norm)
+        activation = args.activation
+        input_dropout = args.input_dropout
+        dropout = args.dropout
+        self_loop = int(args.self_loop)
+
 
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
@@ -131,23 +147,23 @@ def log_run(args: argparse.ArgumentParser) -> None:
     model = EntityClassify(
         hg,
         in_feats,
-        run.params.hidden_feats,
+        hidden_feats,
         out_feats,
-        run.params.num_bases,
-        run.params.num_layers,
-        norm=run.params.norm,
-        batch_norm=bool(run.params.batch_norm),
-        input_dropout=run.params.input_dropout,
-        dropout=run.params.dropout,
-        activation=activations[run.params.activation],
-        self_loop=bool(run.params.self_loop),
+        num_bases,
+        num_layers,
+        norm=norm,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        dropout=dropout,
+        activation=activations[activation],
+        self_loop=self_loop,
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=run.params.embedding_lr)
+        embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
     model_optimizer = torch.optim.Adam(
-        model.parameters(), lr=run.params.model_lr)
+        model.parameters(), lr=model_lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
@@ -225,6 +241,8 @@ def log_run(args: argparse.ArgumentParser) -> None:
         )
 
         utils.log_metrics_to_sigopt(
+            experiment,
+            suggestion,
             checkpoint,
             'RGCN',
             args.dataset,
@@ -233,7 +251,13 @@ def log_run(args: argparse.ArgumentParser) -> None:
             test_time,
         )
     else:
-        utils.log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
+        utils.log_metrics_to_sigopt(
+            experiment,
+            suggestion,
+            checkpoint, 
+            'RGCN', 
+            args.dataset
+        )
 
 
 if __name__ == '__main__':
@@ -244,9 +268,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--create-experiment', default=False,
-                           action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--experiment-id', default=None, type=int)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
+    argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
@@ -275,18 +298,22 @@ if __name__ == '__main__':
     if args.download_dataset:
         utils.download_dataset(args.dataset)
 
-    if args.create_experiment:
-        import yaml
-        exp_meta = yaml.load(open('./full_graph_experiment.yml'), Loader=yaml.FullLoader)
-        experiment = sigopt.create_experiment(**exp_meta)
-    elif args.experiment_id:
-        experiment = sigopt.get_experiment(args.experiment_id)
+    if args.experiment_id is not None:
+        if args.sigopt_api_token is not None:
+            token = args.sigopt_api_token
+        else:
+            token = os.getenv('SIGOPT_API_TOKEN')
+
+            if token is None:
+                raise ValueError(
+                    'SigOpt API token is not provided. Please provide it by '
+                    '--sigopt-api-token argument or set '
+                    'SIGOPT_API_TOKEN environment variable.'
+                )
+
+        experiment = sigopt.Connection(token).experiments(args.experiment_id)
+
+        while utils.is_experiment_finished(experiment):
+            run(args, experiment)
     else:
-        print("No experiment ID given and not creating experiment")
-        exit
-
-    while not experiment.is_finished():
-        with experiment.create_run() as run:
-            log_run(args)
-        experiment = sigopt.get_experiment(args.experiment_id)
-
+        run(args)

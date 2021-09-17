@@ -1,5 +1,8 @@
-# mini_batch_experiment.yml
-name: POC - rgcn mini batch 
+# ogbn_mag_mini_batch_accuracy.yml
+name: rgcn - ogbn-mag - mini-batch - accuracy
+conditionals:
+  - name: num_layers
+    values: ['2', '3', '4', '5']
 parameters: 
   - name: model_lr
     type: double
@@ -49,12 +52,44 @@ parameters:
       name: beta
       shape_a: 2
       shape_b: 3
-  - name: self_loop
+ - name: batch_size
     type: int
-    grid: [0, 1]
-  - name: batch_size
+    grid: [500, 750, 1000, 2000, 4000, 8000, 16000]
+  - name: layer_1_fanout
     type: int
-    grid: [50, 100, 250, 500, 750, 1000]
+    conditions: 
+      num_layers: ['2', '3', '4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_2_fanout
+    type: int
+    conditions: 
+      num_layers: ['2', '3', '4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_3_fanout
+    type: int
+    conditions: 
+      num_layers: ['3', '4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_4_fanout
+    type: int
+    conditions: 
+      num_layers: ['4', '5']
+    bounds:
+      min: 5
+      max: 26
+  - name: layer_5_fanout
+    type: int
+    conditions: 
+      num_layers: ['5']
+    bounds:
+      min: 5
+      max: 26
 metrics:
   - name: best epoch 
     strategy: store

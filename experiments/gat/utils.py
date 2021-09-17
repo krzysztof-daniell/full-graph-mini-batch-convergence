@@ -1,6 +1,5 @@
 import os
 import shutil
-import psutil
 from copy import deepcopy
 from typing import Union
 
@@ -8,6 +7,7 @@ import dgl
 import dgl.function as fn
 import matplotlib.pyplot as plt
 import numpy as np
+import psutil
 import sigopt
 import torch
 import torch.nn as nn
@@ -81,7 +81,9 @@ class Callback:
         return self._valid_accuracies[self._best_epoch]
 
     @property
-    def best_epoch_model_parameters(self) -> Union[dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
+    def best_epoch_model_parameters(
+        self,
+    ) -> Union[dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
         return self._model_parameters
 
     @property
@@ -106,7 +108,7 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        run.log_checkpoint({
+        sigopt.log_checkpoint({
             'train loss': train_loss,
             'valid loss': valid_loss,
             'train accuracy': train_accuracy,
@@ -175,6 +177,8 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
+    experiment,
+    suggestion,
     checkpoint: Callback,
     model_name: str,
     dataset: str,
@@ -182,30 +186,35 @@ def log_metrics_to_sigopt(
     test_accuracy: float = None,
     test_time: float = None,
 ) -> None:
-    run.log_model(model_name)
-    run.log_dataset(dataset)
-    run.log_metric('best epoch', checkpoint.best_epoch)
-    run.log_metric('best epoch - train loss',
-                      checkpoint.best_epoch_train_loss)
-    run.log_metric('best epoch - train accuracy',
-                      checkpoint.best_epoch_train_accuracy)
-    run.log_metric('best epoch - valid loss',
-                      checkpoint.best_epoch_valid_loss)
-    run.log_metric('best epoch - valid accuracy',
-                      checkpoint.best_epoch_valid_accuracy)
-    run.log_metric('best epoch - training time',
-                      checkpoint.best_epoch_training_time)
-    run.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
-    run.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
+    values = [
+        # {'name': 'model', 'value': model_name},
+        # {'name': 'dataset', 'value': dataset},
+        {'name': 'best epoch', 'value': checkpoint.best_epoch},
+        {'name': 'best epoch - train loss',
+            'value': checkpoint.best_epoch_train_loss},
+        {'name': 'best epoch - train accuracy',
+            'value': checkpoint.best_epoch_train_accuracy},
+        {'name': 'best epoch - valid loss',
+            'value': checkpoint.best_epoch_valid_loss},
+        {'name': 'best epoch - valid accuracy',
+            'value': checkpoint.best_epoch_valid_accuracy},
+        {'name': 'best epoch - training time',
+            'value': checkpoint.best_epoch_training_time},
+        {'name': 'avg train epoch time',
+            'value': np.mean(checkpoint.train_times)},
+        {'name': 'avg valid epoch time',
+            'value': np.mean(checkpoint.valid_times)},
+    ]
 
     if test_loss is not None:
-        run.log_metric('best epoch - test loss', test_loss)
+        values.append({'name': 'best epoch - test loss', 'value': test_loss})
 
     if test_accuracy is not None:
-        run.log_metric('best epoch - test accuracy', test_accuracy)
+        values.append(
+            {'name': 'best epoch - test accuracy', 'value': test_accuracy})
 
     if test_time is not None:
-        run.log_metric('test epoch time', test_time)
+        values.append({'name': 'test epoch time', 'value': test_time})
 
     metrics_plot = get_metrics_plot(
         checkpoint.train_accuracies,
@@ -213,8 +222,16 @@ def log_metrics_to_sigopt(
         checkpoint.train_losses,
         checkpoint.valid_losses,
     )
+    # values.append({'name': 'convergence plot', 'value': metrics_plot})
 
-    run.log_image(metrics_plot, name='convergence plot')
+    experiment.observations().create(suggestion=suggestion.id, values=values)
+
+    metrics_plot = get_metrics_plot(
+        checkpoint.train_accuracies,
+        checkpoint.valid_accuracies,
+        checkpoint.train_losses,
+        checkpoint.valid_losses,
+    )
 
 
 def download_dataset(dataset: str) -> None:
@@ -378,32 +395,35 @@ def process_dataset(
     return dataset, evaluator, g, train_idx, valid_idx, test_idx
 
 
+def set_sigopt_fanouts(fanouts: str) -> list[int]:
+    default_fanouts = [int(i) for i in fanouts.split(',')]
+    sigopt_fanouts = []
 
-def set_sigopt_fanouts(fanouts: str, as_metadata: bool = True) -> list[int]:
-    result = [int(i) for i in fanouts.split(',')]
+    for i in range(sigopt.get_parameter('num_layers', default=len(default_fanouts))):
+        if i < len(default_fanouts):
+            fanout = sigopt.get_parameter(
+                f'layer_{i + 1}_fanout', default=default_fanouts[i])
+        else:
+            fanout = sigopt.get_parameter(f'layer_{i + 1}_fanout')
 
-    for i in reversed(range(len(result))):
-        k,v = f'layer_{i + 1}_fanout', result[i]
-        run.log_metadata(k,v) if as_metadata else run.params.setdefault(k,v)
-        result.pop(i)
+        sigopt_fanouts.append(fanout)
 
-    if not as_metadata:
-        for i in range(run.params.num_layers):
-            result.append(run.params[f'layer_{i + 1}_fanout'])
+    return sigopt_fanouts
 
-    return result
 
-def log_system_info() -> None: 
-  
+def log_system_info() -> None:
+
     # https://psutil.readthedocs.io/en/latest/#processes
     process = psutil.Process()
     virtual_memory = psutil.virtual_memory()
-    run.log_metadata("Python version", sys.version.split()[0])
-    run.log_metadata("Operating System", sys.platform)
-    run.log_metadata("psutil.Process().num_threads", process.num_threads())
+    sigopt.log_metadata("Python version", sys.version.split()[0])
+    sigopt.log_metadata("Operating System", sys.platform)
+    sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
     # run.log_metadata("Process CPU Percent", process.cpu_percent())
-    run.log_metadata("psutil.virtual_memory().total", psutil._common.bytes2human(virtual_memory.total))
-    run.log_metadata("psutil.virtual_memory().available", psutil._common.bytes2human(virtual_memory.available))
+    sigopt.log_metadata("psutil.virtual_memory().total",
+                        psutil._common.bytes2human(virtual_memory.total))
+    sigopt.log_metadata("psutil.virtual_memory().available",
+                        psutil._common.bytes2human(virtual_memory.available))
     # run.log_metadata("Virtual Memory Percent", virtual_memory.percent)
 
 
@@ -425,3 +445,10 @@ def get_evaluation_score(
     }).popitem()
 
     return score
+
+
+def is_experiment_finished(experiment) -> bool:
+    observation_count = experiment.fetch().progress.observation_count
+    observation_budget = experiment.fetch().observation_budget
+
+    return observation_count <= observation_budget

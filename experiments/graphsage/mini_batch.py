@@ -240,7 +240,6 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
                 args.dataset,
             )
 
-
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
 
