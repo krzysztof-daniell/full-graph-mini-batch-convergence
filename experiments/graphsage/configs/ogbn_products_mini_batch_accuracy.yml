@@ -104,5 +104,5 @@ metrics:
     objective: minimize
     threshold: 2449029
 project: 'full-graph-mini-batch'
-observation_budget: 100
+observation_budget: 200
 parallel_bandwidth: 4

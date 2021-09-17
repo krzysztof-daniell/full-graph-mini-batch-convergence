@@ -55,11 +55,9 @@ String createExperiment(
                     --optimization-target ${optimizationTarget}'
             """
         ).trim()
+
+        return experimentID
     }
-
-    echo 'Experiment ID: ${experimentID}'
-
-    return experimentID
 }
 
 void runExperiment(
@@ -208,6 +206,8 @@ pipeline {
                         }
                     }
                 }
+
+                echo 'Experiment ID: ${env.EXPERIMENT_ID}'
             }
         }
         stage('Orchestrate Experiment') {
