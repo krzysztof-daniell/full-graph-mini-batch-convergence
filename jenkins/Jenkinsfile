@@ -188,42 +188,24 @@ pipeline {
             }
         }
         stage('Setup Experiment') {
-            parallel {
-                stage('Create Experiment') {
-                    agent { label 'machine-01' }
-                    steps {
-                        script {
-                            withCredentials([string(
-                                credentialsId: 'sigopt-api-token', 
-                                variable: 'sigoptAPIToken'
-                            )]) {
-                                if (!env.EXPERIMENT_ID) {
-                                    env.EXPERIMENT_ID = createExperiment(
-                                        'dgl-sigopt-node-1',
-                                        env.EXPERIMENT_WORK_DIR,
-                                        sigoptAPIToken,
-                                        param.MODEL,
-                                        param.DATASET,
-                                        param.TRAINING_METHOD,
-                                        param.OPTIMIZATION_TARGET
-                                    )
-                                }
-                            }
+            agent { label 'machine-01' }
+            steps {
+                script {
+                    withCredentials([string(
+                        credentialsId: 'sigopt-api-token', 
+                        variable: 'sigoptAPIToken'
+                    )]) {
+                        if (!env.EXPERIMENT_ID) {
+                            env.EXPERIMENT_ID = createExperiment(
+                                'dgl-sigopt-node-1',
+                                env.EXPERIMENT_WORK_DIR,
+                                sigoptAPIToken,
+                                param.MODEL,
+                                param.DATASET,
+                                param.TRAINING_METHOD,
+                                param.OPTIMIZATION_TARGET
+                            )
                         }
-                    }
-                }
-                stage('Machine 1 - Turn Off Hyperthreading') {
-                    agent { label 'machine-01' }
-                    steps {
-                        turnOffHyperthreading(
-                            'dgl-sigopt-node-1', env.EXPERIMENT_WORK_DIR)
-                    }
-                }
-                stage('Machine 2 - Turn Off Hyperthreading') {
-                    agent { label 'machine-02' }
-                    steps {
-                        turnOffHyperthreading(
-                            'dgl-sigopt-node-1', env.EXPERIMENT_WORK_DIR)
                     }
                 }
             }
