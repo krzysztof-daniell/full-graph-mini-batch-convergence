@@ -101,7 +101,7 @@ def run(
     )
 
     # print(f'{torch.median(g.in_degrees()).item() = }')
-    print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
+    # print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
     # print(f'{torch.min(g.in_degrees()).item() = }')
     # print(f'{torch.max(g.in_degrees()).item() = }')
 
@@ -331,12 +331,11 @@ if __name__ == '__main__':
 
         while utils.is_experiment_finished(experiment):
             suggestion = experiment.suggestions().create()
-            
-            run(args, experiment=experiment, suggestion=suggestion)
-            # try:
-            #     run(args, experiment=experiment, suggestion=suggestion)
-            # except:
-            #     experiment.observations().create(
-            #         failed=True, suggestion=suggestion.id)
+
+            try:
+                run(args, experiment=experiment, suggestion=suggestion)
+            except:
+                experiment.observations().create(
+                    failed=True, suggestion=suggestion.id)
     else:
         run(args)
