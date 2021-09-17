@@ -45,35 +45,35 @@ parameters:
       num_layers: ['2', '3', '4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 51
   - name: layer_2_fanout
     type: int
     conditions: 
       num_layers: ['2', '3', '4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 51
   - name: layer_3_fanout
     type: int
     conditions: 
       num_layers: ['3', '4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 51
   - name: layer_4_fanout
     type: int
     conditions: 
       num_layers: ['4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 51
   - name: layer_5_fanout
     type: int
     conditions: 
       num_layers: ['5']
     bounds:
       min: 1
-      max: 26
+      max: 51
 metrics:
   - name: best epoch 
     strategy: store

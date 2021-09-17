@@ -328,9 +328,10 @@ if __name__ == '__main__':
                 )
 
         experiment = sigopt.Connection(token).experiments(args.experiment_id)
-        suggestion = experiment.suggestions().create()
 
         while utils.is_experiment_finished(experiment):
+            suggestion = experiment.suggestions().create()
+            
             run(args, experiment=experiment, suggestion=suggestion)
             # try:
             #     run(args, experiment=experiment, suggestion=suggestion)
