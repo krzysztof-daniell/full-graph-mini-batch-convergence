@@ -188,7 +188,7 @@ pipeline {
             }
         }
         stage('Setup Experiment') {
-            paralell {
+            parallel {
                 stage('Create Experiment') {
                     agent { label 'machine-01' }
                     steps {
@@ -230,7 +230,7 @@ pipeline {
         }
         stage('Orchestrate Experiment') {
             // TODO: Add retry if needed https://stackoverflow.com/questions/63403959/jenkins-restart-only-failed-stage-in-parallel
-            paralell {
+            parallel {
                 stage('Machine 1 - Node 1') {
                     agent { label 'machine-01' }
                     steps {
@@ -334,10 +334,4 @@ pipeline {
             }
         }
     }
-    // post {
-    //     always {
-    //         // TODO: Stop and remove containers
-    //         }
-    //     }
-    // }
 }
