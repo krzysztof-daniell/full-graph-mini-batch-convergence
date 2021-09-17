@@ -92,7 +92,7 @@ pipeline {
 
         IMAGE_NAME = 'dgl-sigopt'
         DATASET_VOLUME = '/home/jenkins/volumes/datasets'
-        EXPERIMENT_WORK_DIR = '/home/dglsigopt/full-graph-mini-batch-convergence/experiments'
+        EXPERIMENT_WORK_DIR = '/root/full-graph-mini-batch-convergence/experiments'
 
         NODE_1_CORES = '0-23'
         NODE_1_MEMORY = '0'

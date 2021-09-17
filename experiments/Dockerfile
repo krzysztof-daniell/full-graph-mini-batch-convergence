@@ -1,10 +1,6 @@
 FROM python:3.9
 
-RUN useradd -m -s /usr/bin/bash dgl_sigopt
-
-USER dglsigopt
-
-WORKDIR /dglsigopt
+WORKDIR /root
 
 COPY ./requirements.txt ./
 
