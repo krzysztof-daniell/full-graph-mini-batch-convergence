@@ -28,7 +28,9 @@ void cloneRepository(
     String repositoryURL
 ) {
     sh """docker exec ${containerName} -c bash
-        'git clone ${repositoryURL}'
+        'git clone ${repositoryURL} \
+        && cd full-graph-mini-batch-convergence \
+        && git checkout deorchestrate-regular'
     """
 }
 
