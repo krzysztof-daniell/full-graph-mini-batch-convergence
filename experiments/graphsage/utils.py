@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from copy import deepcopy
 from typing import Union
 
@@ -364,7 +365,6 @@ def set_sigopt_fanouts(fanouts: str) -> list[int]:
 
 
 def log_system_info() -> None:
-
     # https://psutil.readthedocs.io/en/latest/#processes
     process = psutil.Process()
     virtual_memory = psutil.virtual_memory()
