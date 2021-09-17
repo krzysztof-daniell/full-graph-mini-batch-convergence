@@ -200,10 +200,10 @@ pipeline {
                                 'dgl-sigopt-node-1',
                                 env.EXPERIMENT_WORK_DIR,
                                 sigoptAPIToken,
-                                param.MODEL,
-                                param.DATASET,
-                                param.TRAINING_METHOD,
-                                param.OPTIMIZATION_TARGET
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
                             )
                         }
                     }
@@ -224,10 +224,10 @@ pipeline {
                                 env.EXPERIMENT_WORK_DIR,
                                 sigoptAPIToken,
                                 env.EXPERIMENT_ID,
-                                param.MODEL,
-                                param.DATASET,
-                                param.TRAINING_METHOD,
-                                param.OPTIMIZATION_TARGET
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
                             )
                         }
                     }
@@ -249,10 +249,10 @@ pipeline {
                                 env.EXPERIMENT_WORK_DIR,
                                 sigoptAPIToken,
                                 env.EXPERIMENT_ID,
-                                param.MODEL,
-                                param.DATASET,
-                                param.TRAINING_METHOD,
-                                param.OPTIMIZATION_TARGET
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
                             )
                         }
                     }
@@ -274,10 +274,10 @@ pipeline {
                                 env.EXPERIMENT_WORK_DIR,
                                 sigoptAPIToken,
                                 env.EXPERIMENT_ID,
-                                param.MODEL,
-                                param.DATASET,
-                                param.TRAINING_METHOD,
-                                param.OPTIMIZATION_TARGET
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
                             )
                         } 
                     }
@@ -299,10 +299,10 @@ pipeline {
                                 env.EXPERIMENT_WORK_DIR,
                                 sigoptAPIToken,
                                 env.EXPERIMENT_ID,
-                                param.MODEL,
-                                param.DATASET,
-                                param.TRAINING_METHOD,
-                                param.OPTIMIZATION_TARGET
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
                             )
                         } 
                     }
