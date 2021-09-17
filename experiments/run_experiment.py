@@ -3,7 +3,7 @@ import os
 
 
 def run_experiment(args: argparse.ArgumentParser):
-    path = f'{args.model}/{args.training_method}.py'
+    path = f'{args.model}/{args.training_method.replace("-", "_")}.py'
 
     arguments = [f'--dataset {args.dataset}']
 
@@ -23,7 +23,7 @@ def run_experiment(args: argparse.ArgumentParser):
 
     arguments = ' '.join(arguments)
 
-    os.system(f'OMP_NUM_THREADS=20 {path} {arguments}')
+    os.system(f'OMP_NUM_THREADS=20 python {path} {arguments}')
 
 
 if __name__ == '__main__':

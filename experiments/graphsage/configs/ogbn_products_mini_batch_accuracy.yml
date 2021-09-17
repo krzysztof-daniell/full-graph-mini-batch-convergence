@@ -101,6 +101,7 @@ metrics:
     objective: minimize
   - name: max batch num nodes
     strategy: constraint
+    objective: minimize
     threshold: 2449029
 project: 'full-graph-mini-batch'
 observation_budget: 50

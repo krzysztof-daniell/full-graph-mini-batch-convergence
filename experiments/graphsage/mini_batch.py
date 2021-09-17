@@ -101,7 +101,7 @@ def run(
     )
 
     # print(f'{torch.median(g.in_degrees()).item() = }')
-    # print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
+    print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
     # print(f'{torch.min(g.in_degrees()).item() = }')
     # print(f'{torch.max(g.in_degrees()).item() = }')
 
@@ -123,6 +123,8 @@ def run(
         dropout = assignments['dropout']
 
         max_batch_num_nodes = np.prod(fanouts) * batch_size
+
+        print(assignments)
     else:
         fanouts = [int(i) for i in args.fanouts.split(',')]
         batch_size = args.batch_size
@@ -250,7 +252,7 @@ def run(
             utils.log_metrics_to_sigopt(
                 experiment,
                 suggestion,
-                metrics,
+                **metrics,
             )
     else:
         metrics = {
@@ -268,7 +270,7 @@ def run(
         utils.log_metrics_to_sigopt(
             experiment,
             suggestion,
-            metrics,
+            **metrics,
         )
 
 
@@ -329,10 +331,11 @@ if __name__ == '__main__':
         suggestion = experiment.suggestions().create()
 
         while utils.is_experiment_finished(experiment):
-            try:
-                run(args, experiment=experiment, suggestion=suggestion)
-            except:
-                experiment.observations().create(
-                    failed=True, suggestion=suggestion.id)
+            run(args, experiment=experiment, suggestion=suggestion)
+            # try:
+            #     run(args, experiment=experiment, suggestion=suggestion)
+            # except:
+            #     experiment.observations().create(
+            #         failed=True, suggestion=suggestion.id)
     else:
         run(args)
