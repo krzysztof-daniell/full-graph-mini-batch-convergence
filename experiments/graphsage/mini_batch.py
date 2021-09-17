@@ -93,6 +93,8 @@ def run(
 ) -> None:
     torch.manual_seed(args.seed)
 
+    print(args)
+
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
@@ -102,6 +104,11 @@ def run(
 
     # print(f'{torch.median(g.in_degrees()).item() = }')
     # print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
+    # std_degree, mean_degree = torch.std_mean(g.in_degrees().to(torch.float32))
+
+    # print(f'Max fanout: {std_degree + mean_degree:.2f}')
+    # print(f'Num edge: {g.num_edges()}')
+
     # print(f'{torch.min(g.in_degrees()).item() = }')
     # print(f'{torch.max(g.in_degrees()).item() = }')
 
@@ -139,7 +146,7 @@ def run(
 
     train_flag = True
 
-    if experiment is not None and max_batch_num_nodes > g.num_nodes():
+    if experiment is not None and max_batch_num_nodes > 61859140:
         train_flag = False
 
     if train_flag:

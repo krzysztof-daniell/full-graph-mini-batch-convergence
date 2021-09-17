@@ -45,35 +45,35 @@ parameters:
       num_layers: ['2', '3', '4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 146
   - name: layer_2_fanout
     type: int
     conditions: 
       num_layers: ['2', '3', '4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 146
   - name: layer_3_fanout
     type: int
     conditions: 
       num_layers: ['3', '4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 146
   - name: layer_4_fanout
     type: int
     conditions: 
       num_layers: ['4', '5']
     bounds:
       min: 1
-      max: 26
+      max: 146
   - name: layer_5_fanout
     type: int
     conditions: 
       num_layers: ['5']
     bounds:
       min: 1
-      max: 26
+      max: 146
 metrics:
   - name: best epoch 
     strategy: store
@@ -102,7 +102,7 @@ metrics:
   - name: max batch num nodes
     strategy: constraint
     objective: minimize
-    threshold: 2449029
+    threshold: 61859140
 project: 'full-graph-mini-batch'
 observation_budget: 200
 parallel_bandwidth: 4
