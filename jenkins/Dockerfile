@@ -1,5 +1,7 @@
 FROM jenkins/jenkins:latest
 
+USER root
+
 ENV http_proxy=${http_proxy}
 ENV https_proxy=${https_proxy}
 ENV no_proxy=${no_proxy}
