@@ -18,8 +18,8 @@ void runContainer(
 }
 
 void turnOffHyperthreading(String containerName, String experimentWorkDir) {
-    sh """docker exec -w ${experimentWorkDir} ${containerName} -c sh \
-        './turn_off_hyperthreading.sh'
+    sh """docker exec -w ${experimentWorkDir} ${containerName} \
+        'bash turn_off_hyperthreading.sh'
     """
 }
 
@@ -27,7 +27,7 @@ void cloneRepository(
     String containerName,
     String repositoryURL
 ) {
-    sh """docker exec ${containerName} -c sh \
+    sh """docker exec ${containerName} \
         'git clone ${repositoryURL} \
         && cd full-graph-mini-batch-convergence \
         && git checkout deorchestrate-regular'
@@ -46,7 +46,7 @@ String createExperiment(
     script {
         String experimentID = sh (
             returnStdout: true,
-            script: """docker exec -w ${experimentWorkDir} ${containerName} -c sh \
+            script: """docker exec -w ${experimentWorkDir} ${containerName} \
                 'python create_experiment.py \
                     --sigopt-api-token ${sigoptAPIToken} \
                     --model ${model} \
@@ -72,7 +72,7 @@ void runExperiment(
     String trainingMethod,
     String optimizationTarget
 ) {
-    sh """docker exec -w ${experimentWorkDir} ${containerName} -c sh \
+    sh """docker exec -w ${experimentWorkDir} ${containerName} \
         'python run_experiment.py \
             --sigopt-api-token ${sigoptAPIToken} \
             --experiment-id ${experimentID} \
