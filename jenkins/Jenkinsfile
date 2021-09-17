@@ -27,7 +27,7 @@ void cloneRepository(
     String containerName,
     String repositoryURL
 ) {
-    sh """docker exec ${containerName} -c bash
+    sh """docker exec ${containerName} -c bash \
         'git clone ${repositoryURL} \
         && cd full-graph-mini-batch-convergence \
         && git checkout deorchestrate-regular'
@@ -229,7 +229,6 @@ pipeline {
             }
         }
         stage('Orchestrate Experiment') {
-            // TODO: Add retry if needed https://stackoverflow.com/questions/63403959/jenkins-restart-only-failed-stage-in-parallel
             parallel {
                 stage('Machine 1 - Node 1') {
                     agent { label 'machine-01' }
