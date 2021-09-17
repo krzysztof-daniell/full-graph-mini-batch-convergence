@@ -179,59 +179,11 @@ def get_metrics_plot(
 def log_metrics_to_sigopt(
     experiment,
     suggestion,
-    checkpoint: Callback,
-    model_name: str,
-    dataset: str,
-    test_loss: float = None,
-    test_accuracy: float = None,
-    test_time: float = None,
+    **metrics,
 ) -> None:
-    values = [
-        # {'name': 'model', 'value': model_name},
-        # {'name': 'dataset', 'value': dataset},
-        {'name': 'best epoch', 'value': checkpoint.best_epoch},
-        {'name': 'best epoch - train loss',
-            'value': checkpoint.best_epoch_train_loss},
-        {'name': 'best epoch - train accuracy',
-            'value': checkpoint.best_epoch_train_accuracy},
-        {'name': 'best epoch - valid loss',
-            'value': checkpoint.best_epoch_valid_loss},
-        {'name': 'best epoch - valid accuracy',
-            'value': checkpoint.best_epoch_valid_accuracy},
-        {'name': 'best epoch - training time',
-            'value': checkpoint.best_epoch_training_time},
-        {'name': 'avg train epoch time',
-            'value': np.mean(checkpoint.train_times)},
-        {'name': 'avg valid epoch time',
-            'value': np.mean(checkpoint.valid_times)},
-    ]
-
-    if test_loss is not None:
-        values.append({'name': 'best epoch - test loss', 'value': test_loss})
-
-    if test_accuracy is not None:
-        values.append(
-            {'name': 'best epoch - test accuracy', 'value': test_accuracy})
-
-    if test_time is not None:
-        values.append({'name': 'test epoch time', 'value': test_time})
-
-    metrics_plot = get_metrics_plot(
-        checkpoint.train_accuracies,
-        checkpoint.valid_accuracies,
-        checkpoint.train_losses,
-        checkpoint.valid_losses,
-    )
-    # values.append({'name': 'convergence plot', 'value': metrics_plot})
+    values = [{'name': k, 'value': v} for k, v in metrics.items()]
 
     experiment.observations().create(suggestion=suggestion.id, values=values)
-
-    metrics_plot = get_metrics_plot(
-        checkpoint.train_accuracies,
-        checkpoint.valid_accuracies,
-        checkpoint.train_losses,
-        checkpoint.valid_losses,
-    )
 
 
 def download_dataset(dataset: str) -> None:

@@ -44,35 +44,35 @@ parameters:
     conditions: 
       num_layers: ['2', '3', '4', '5']
     bounds:
-      min: 5
+      min: 1
       max: 26
   - name: layer_2_fanout
     type: int
     conditions: 
       num_layers: ['2', '3', '4', '5']
     bounds:
-      min: 5
+      min: 1
       max: 26
   - name: layer_3_fanout
     type: int
     conditions: 
       num_layers: ['3', '4', '5']
     bounds:
-      min: 5
+      min: 1
       max: 26
   - name: layer_4_fanout
     type: int
     conditions: 
       num_layers: ['4', '5']
     bounds:
-      min: 5
+      min: 1
       max: 26
   - name: layer_5_fanout
     type: int
     conditions: 
       num_layers: ['5']
     bounds:
-      min: 5
+      min: 1
       max: 26
 metrics:
   - name: best epoch 
@@ -81,13 +81,13 @@ metrics:
   - name: best epoch - train loss
     strategy: store
     objective: minimize
-  - name: best epoch - train accuracy
+  - name: best epoch - train score
     strategy: store
     objective: maximize
   - name: best epoch - valid loss
     strategy: optimize
     objective: minimize
-  - name: best epoch - valid accuracy
+  - name: best epoch - valid score
     strategy: store
     objective: maximize
   - name: best epoch - training time
@@ -99,6 +99,9 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
+  - name: max batch num nodes
+    strategy: constraint
+    threshold: 2449029
 project: 'full-graph-mini-batch'
 observation_budget: 50
-parallel_bandwidth: 1
+parallel_bandwidth: 4

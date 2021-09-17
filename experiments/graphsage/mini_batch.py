@@ -4,6 +4,7 @@ from timeit import default_timer
 from typing import Callable, Union
 
 import dgl
+import numpy as np
 import sigopt
 import torch
 import torch.nn as nn
@@ -85,7 +86,11 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser, experiment=None) -> None:
+def run(
+    args: argparse.ArgumentParser,
+    experiment=None,
+    suggestion=None,
+) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -103,7 +108,6 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if experiment is not None:
-        suggestion = experiment.suggestions().create()
         assignments = suggestion.assignments
 
         fanouts = [assignments[f'layer_{i + 1}_fanout']
@@ -118,7 +122,7 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
         input_dropout = assignments['input_dropout']
         dropout = assignments['dropout']
 
-        print(assignments)
+        max_batch_num_nodes = np.prod(fanouts) * batch_size
     else:
         fanouts = [int(i) for i in args.fanouts.split(',')]
         batch_size = args.batch_size
@@ -131,114 +135,142 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
         input_dropout = args.input_dropout
         dropout = args.dropout
 
-    sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
-    train_dataloader = dgl.dataloading.NodeDataLoader(
-        g,
-        train_idx,
-        sampler,
-        batch_size=batch_size,
-        shuffle=True,
-        drop_last=False,
-        num_workers=4,
-    )
+    train_flag = True
 
-    in_feats = g.ndata['feat'].shape[-1]
-    out_feats = dataset.num_classes
+    if experiment is not None and max_batch_num_nodes > g.num_nodes():
+        train_flag = False
 
-    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
-
-    model = GraphSAGE(
-        in_feats,
-        hidden_feats,
-        out_feats,
-        num_layers,
-        aggregator_type=aggregator_type,
-        batch_norm=batch_norm,
-        input_dropout=input_dropout,
-        dropout=dropout,
-        activation=activations[activation],
-    ).to(device)
-
-    if args.dataset == 'ogbn-proteins':
-        loss_function = nn.BCEWithLogitsLoss().to(device)
-    else:
-        loss_function = nn.CrossEntropyLoss().to(device)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-    checkpoint = utils.Callback(args.early_stopping_patience,
-                                args.early_stopping_monitor)
-
-    for epoch in range(args.num_epochs):
-        train_time, train_loss, train_score = train(
-            model,
-            device,
-            optimizer,
-            loss_function,
-            evaluator,
-            train_dataloader,
-        )
-        valid_time, valid_loss, valid_score = validate(
-            model, loss_function, evaluator, g, valid_idx)
-
-        checkpoint.create(
-            epoch,
-            train_time,
-            valid_time,
-            train_loss,
-            valid_loss,
-            train_score,
-            valid_score,
-            model,
+    if train_flag:
+        sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
+        train_dataloader = dgl.dataloading.NodeDataLoader(
+            g,
+            train_idx,
+            sampler,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=False,
+            num_workers=4,
         )
 
-        print(
-            f'Epoch: {epoch + 1:03} '
-            f'Train Loss: {train_loss:.2f} '
-            f'Valid Loss: {valid_loss:.2f} '
-            f'Train Score: {train_score:.4f} '
-            f'Valid Score: {valid_score:.4f} '
-            f'Train Epoch Time: {train_time:.2f} '
-            f'Valid Epoch Time: {valid_time:.2f}'
-        )
+        in_feats = g.ndata['feat'].shape[-1]
+        out_feats = dataset.num_classes
 
-        if checkpoint.should_stop:
-            print('!! Early Stopping !!')
+        activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-            break
+        model = GraphSAGE(
+            in_feats,
+            hidden_feats,
+            out_feats,
+            num_layers,
+            aggregator_type=aggregator_type,
+            batch_norm=batch_norm,
+            input_dropout=input_dropout,
+            dropout=dropout,
+            activation=activations[activation],
+        ).to(device)
 
-    if args.test_validation:
-        model.load_state_dict(checkpoint.best_epoch_model_parameters)
-
-        test_time, test_loss, test_score = validate(
-            model, loss_function, evaluator, g, test_idx)
-
-        print(
-            f'Test Loss: {test_loss:.2f} '
-            f'Test Score: {test_score * 100:.2f} % '
-            f'Test Epoch Time: {test_time:.2f}'
-        )
-
-    if experiment is not None:
-        if args.test_validation:
-            utils.log_metrics_to_sigopt(
-                experiment,
-                suggestion,
-                checkpoint,
-                'GraphSAGE NS',
-                args.dataset,
-                test_loss,
-                test_score,
-                test_time,
-            )
+        if args.dataset == 'ogbn-proteins':
+            loss_function = nn.BCEWithLogitsLoss().to(device)
         else:
+            loss_function = nn.CrossEntropyLoss().to(device)
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+        checkpoint = utils.Callback(args.early_stopping_patience,
+                                    args.early_stopping_monitor)
+
+        for epoch in range(args.num_epochs):
+            train_time, train_loss, train_score = train(
+                model,
+                device,
+                optimizer,
+                loss_function,
+                evaluator,
+                train_dataloader,
+            )
+            valid_time, valid_loss, valid_score = validate(
+                model, loss_function, evaluator, g, valid_idx)
+
+            checkpoint.create(
+                epoch,
+                train_time,
+                valid_time,
+                train_loss,
+                valid_loss,
+                train_score,
+                valid_score,
+                model,
+            )
+
+            print(
+                f'Epoch: {epoch + 1:03} '
+                f'Train Loss: {train_loss:.2f} '
+                f'Valid Loss: {valid_loss:.2f} '
+                f'Train Score: {train_score:.4f} '
+                f'Valid Score: {valid_score:.4f} '
+                f'Train Epoch Time: {train_time:.2f} '
+                f'Valid Epoch Time: {valid_time:.2f}'
+            )
+
+            if checkpoint.should_stop:
+                print('!! Early Stopping !!')
+
+                break
+
+        if args.test_validation:
+            model.load_state_dict(checkpoint.best_epoch_model_parameters)
+
+            test_time, test_loss, test_score = validate(
+                model, loss_function, evaluator, g, test_idx)
+
+            print(
+                f'Test Loss: {test_loss:.2f} '
+                f'Test Score: {test_score * 100:.2f} % '
+                f'Test Epoch Time: {test_time:.2f}'
+            )
+
+        if experiment is not None:
+            metrics = {
+                'best epoch': checkpoint.best_epoch,
+                'best epoch - train loss': checkpoint.best_epoch_train_loss,
+                'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+                'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+                'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+                'best epoch - training time': checkpoint.best_epoch_training_time,
+                'avg train epoch time': np.mean(checkpoint.train_times),
+                'avg valid epoch time': np.mean(checkpoint.valid_times),
+                'max batch num nodes': max_batch_num_nodes,
+            }
+
+            if args.test_validation:
+                metrics['best epoch - test loss'] = test_loss
+                metrics['best epoch - test score'] = test_score
+                metrics['test epoch time'] = test_time
+
             utils.log_metrics_to_sigopt(
                 experiment,
                 suggestion,
-                checkpoint,
-                'GraphSAGE NS',
-                args.dataset,
+                metrics,
             )
+    else:
+        metrics = {
+            'best epoch': 0,
+            'best epoch - train loss': 0,
+            'best epoch - train score': 0,
+            'best epoch - valid loss': 0,
+            'best epoch - valid score': 0,
+            'best epoch - training time': 0,
+            'avg train epoch time': 0,
+            'avg valid epoch time': 0,
+            'max batch num nodes': max_batch_num_nodes,
+        }
+
+        utils.log_metrics_to_sigopt(
+            experiment,
+            suggestion,
+            metrics,
+        )
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -294,8 +326,13 @@ if __name__ == '__main__':
                 )
 
         experiment = sigopt.Connection(token).experiments(args.experiment_id)
+        suggestion = experiment.suggestions().create()
 
         while utils.is_experiment_finished(experiment):
-            run(args, experiment)
+            try:
+                run(args, experiment=experiment, suggestion=suggestion)
+            except:
+                experiment.observations().create(
+                    failed=True, suggestion=suggestion.id)
     else:
         run(args)
