@@ -93,8 +93,6 @@ def run(
 ) -> None:
     torch.manual_seed(args.seed)
 
-    print(args)
-
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
         args.dataset,
         root=args.dataset_root,
@@ -102,8 +100,44 @@ def run(
         self_loop=args.graph_self_loop,
     )
 
+    # print(f'{torch.min(g.in_degrees()).item() = }')
+    # print(f'{torch.max(g.in_degrees()).item() = }')
     # print(f'{torch.median(g.in_degrees()).item() = }')
     # print(f'{torch.mean(g.in_degrees().to(torch.float32)).item() = }')
+    # print(f'{torch.std(g.in_degrees().to(torch.float32)).item() = }')
+    # print(f'{torch.mode(g.in_degrees()) = }')
+
+    # x = {}
+
+    # for i in g.in_degrees():
+    #     if x.get(f'{i.item()}') is not None:
+    #         x[f'{i.item()}'] += 1
+    #     else:
+    #         x[f'{i.item()}'] = 1
+
+    # for max_fanout in range(2, 1000):
+    #     y = 0
+
+    #     for i in range(1, max_fanout):
+    #         if x.get(f'{i}') is not None:
+    #             y += x[f'{i}']
+
+    #     if args.dataset == 'ogbn-arxiv':
+    #         num_nodes = 169343
+    #     if args.dataset == 'ogbn-products':
+    #         num_nodes = 2449029
+    #     if args.dataset == 'ogbn-proteins':
+    #         num_nodes = 132534
+
+    #     percentage = y / num_nodes
+
+    #     print(f'{max_fanout = :3} {percentage = :.2f}')
+
+    #     if percentage >= 0.5:
+    #         break
+
+    # print(dict(sorted(x.items(), key=lambda item: item[1])))
+
     # std_degree, mean_degree = torch.std_mean(g.in_degrees().to(torch.float32))
 
     # print(f'Max fanout: {std_degree + mean_degree:.2f}')
@@ -131,7 +165,8 @@ def run(
 
         max_batch_num_nodes = np.prod(fanouts) * batch_size
 
-        print(assignments)
+        print(f'{suggestion.id = }')
+        print(f'{assignments = }')
     else:
         fanouts = [int(i) for i in args.fanouts.split(',')]
         batch_size = args.batch_size
