@@ -181,7 +181,7 @@ def run(
 
     train_flag = True
 
-    if experiment is not None and max_batch_num_nodes > 61859140:
+    if experiment is not None and max_batch_num_nodes > g.num_nodes():
         train_flag = False
 
     if train_flag:
