@@ -124,7 +124,7 @@ def run(
         
         train_flag = True
 
-        if experiment is not None and max_batch_num_nodes > g.num_nodes():
+        if max_batch_num_nodes > g.num_nodes():
             train_flag = False
 
         if train_flag:
@@ -240,9 +240,9 @@ def run(
             print("FAILED - NOT TRAINING")
             metrics = {
                 'best epoch': 0,
-                'best epoch - train loss': 0,
+                'best epoch - train loss': 100,
                 'best epoch - train score': 0,
-                'best epoch - valid loss': 0,
+                'best epoch - valid loss': 100,
                 'best epoch - valid score': 0,
                 'best epoch - training time': 0,
                 'avg train epoch time': 0,
