@@ -43,13 +43,13 @@ metrics:
   - name: best epoch - train loss
     strategy: store
     objective: minimize
-  - name: best epoch - train accuracy
+  - name: best epoch - train score
     strategy: store
     objective: maximize
   - name: best epoch - valid loss
     strategy: optimize
     objective: minimize
-  - name: best epoch - valid accuracy
+  - name: best epoch - valid score
     strategy: store
     objective: maximize
   - name: best epoch - training time
@@ -61,6 +61,5 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-project: 'full-graph-mini-batch'
-observation_budget: 50
+budget: 10
 parallel_bandwidth: 1

@@ -93,6 +93,7 @@ class Callback:
 
     def create(
         self,
+        sigopt_context,
         epoch: int,
         train_time: float,
         valid_time: float,
@@ -109,7 +110,8 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        sigopt.log_checkpoint({
+        print("LOGGING CHECKPOINT")
+        sigopt_context.log_checkpoint({
             'train loss': train_loss,
             'valid loss': valid_loss,
             'train accuracy': train_accuracy,
@@ -178,21 +180,17 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
-    experiment,
-    suggestion,
-    **metrics,
+    sigopt_context,
+    metrics,
 ) -> None:
-    values = [{'name': k, 'value': v} for k, v in metrics.items()]
-
-    experiment.observations().create(suggestion=suggestion.id, values=values)
-
+    print("LOGGING METRICS")
+    values = [sigopt_context.log_metric(name=k, value=v) for k, v in metrics.items()]
 
 def download_dataset(dataset: str) -> None:
     if dataset == 'ogbn-products':
         command = 'aws s3 cp s3://ogb-products ./dataset --recursive'
         os.system(command)
         shutil.move('./dataset/ogbn_products', './dataset/ogbn_products_dgl')
-
 
 class OGBDataset:
     def __init__(

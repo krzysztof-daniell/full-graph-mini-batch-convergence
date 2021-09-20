@@ -5,6 +5,7 @@ from typing import Callable
 
 import dgl
 import sigopt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -85,118 +86,140 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if experiment is not None:
-        suggestion = experiment.suggestions().create()
-        assignments = suggestion.assignments
-        lr = assignments['lr']
-        hidden_feats = assignments['hidden_feats']
-        num_layers = int(assignments['num_layers'])
-        aggregator_type = assignments['aggregator_type']
-        batch_norm = bool(assignments['batch_norm'])
-        activation = assignments['activation']
-        input_dropout = assignments['input_dropout']
-        dropout = assignments['dropout']
-        print(assignments)
-    else:
-        lr = args.lr
-        hidden_feats = args.hidden_feats
-        num_layers = args.num_layers
-        aggregator_type = args.aggregator_type
-        batch_norm = args.batch_norm
-        activation = args.activation
-        input_dropout = args.input_dropout
-        dropout = args.dropout
+    with experiment.create_run() as sigopt_context:
+    
+        sigopt_context.params.setdefaults(dict(
+            lr = args.lr,
+            hidden_feats = args.hidden_feats,
+            num_layers = args.num_layers,
+            aggregator_type = args.aggregator_type,
+            batch_norm = args.batch_norm,
+            activation = args.activation,
+            input_dropout = args.input_dropout,
+            dropout = args.dropout
+        ))
 
-    in_feats = g.ndata['feat'].shape[-1]
-    out_feats = dataset.num_classes
+        in_feats = g.ndata['feat'].shape[-1]
+        out_feats = dataset.num_classes
 
-    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
+        activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-    model = GraphSAGE(
-        in_feats,
-        hidden_feats,
-        out_feats,
-        num_layers,
-        aggregator_type=aggregator_type,
-        batch_norm=batch_norm,
-        input_dropout=input_dropout,
-        dropout=dropout,
-        activation=activations[activation],
-    ).to(device)
+        model = GraphSAGE(
+            in_feats,
+            sigopt_context.params.hidden_feats,
+            out_feats,
+            int(sigopt_context.params.num_layers),
+            aggregator_type=sigopt_context.params.aggregator_type,
+            batch_norm=sigopt_context.params.batch_norm,
+            input_dropout=sigopt_context.params.input_dropout,
+            dropout=sigopt_context.params.dropout,
+            activation=activations[sigopt_context.params.activation],
+        ).to(device)
 
-    if args.dataset == 'ogbn-proteins':
-        loss_function = nn.BCEWithLogitsLoss().to(device)
-    else:
-        loss_function = nn.CrossEntropyLoss().to(device)
+        if args.dataset == 'ogbn-proteins':
+            loss_function = nn.BCEWithLogitsLoss().to(device)
+        else:
+            loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=run.params.lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=sigopt_context.params.lr)
 
-    checkpoint = utils.Callback(args.early_stopping_patience,
-                                args.early_stopping_monitor)
+        checkpoint = utils.Callback(args.early_stopping_patience,
+                                    args.early_stopping_monitor)
 
-    for epoch in range(args.num_epochs):
-        train_time, train_loss, train_score = train(
-            model, optimizer, loss_function, evaluator, g, train_idx)
-        valid_time, valid_loss, valid_score = validate(
-            model, loss_function, evaluator, g, valid_idx)
+        for epoch in range(args.num_epochs):
+            train_time, train_loss, train_score = train(
+                model, 
+                optimizer,
+                loss_function, 
+                evaluator, 
+                g, 
+                train_idx
+            )
+            valid_time, valid_loss, valid_score = validate(
+                model, 
+                loss_function, 
+                evaluator, 
+                g, 
+                valid_idx
+            )
 
-        checkpoint.create(
-            epoch,
-            train_time,
-            valid_time,
-            train_loss,
-            valid_loss,
-            train_score,
-            valid_score,
-            model,
-        )
-
-        print(
-            f'Epoch: {epoch + 1:03} '
-            f'Train Loss: {train_loss:.2f} '
-            f'Valid Loss: {valid_loss:.2f} '
-            f'Train Score: {train_score:.4f} '
-            f'Valid Score: {valid_score:.4f} '
-            f'Train Epoch Time: {train_time:.2f} '
-            f'Valid Epoch Time: {valid_time:.2f}'
-        )
-
-        if checkpoint.should_stop:
-            print('!! Early Stopping !!')
-
-            break
-
-    if experiment is not None:
-        if args.test_validation:
-            model.load_state_dict(checkpoint.best_epoch_model_parameters)
-
-            test_time, test_loss, test_score = validate(
-                model, loss_function, evaluator, g, test_idx)
+            checkpoint.create(
+                sigopt_context,
+                epoch,
+                train_time,
+                valid_time,
+                train_loss,
+                valid_loss,
+                train_score,
+                valid_score,
+                model,
+            )
 
             print(
-                f'Test Loss: {test_loss:.2f} '
-                f'Test Score: {test_score:.4f} '
-                f'Test Epoch Time: {test_time:.2f}'
+                f'Epoch: {epoch + 1:03} '
+                f'Train Loss: {train_loss:.2f} '
+                f'Valid Loss: {valid_loss:.2f} '
+                f'Train Score: {train_score:.4f} '
+                f'Valid Score: {valid_score:.4f} '
+                f'Train Epoch Time: {train_time:.2f} '
+                f'Valid Epoch Time: {valid_time:.2f}'
             )
 
-            utils.log_metrics_to_sigopt(
-                experiment,
-                suggestion,
-                checkpoint,
-                'GraphSAGE',
-                args.dataset,
-                test_loss,
-                test_score,
-                test_time,
-            )
-        else:
-            utils.log_metrics_to_sigopt(
-                experiment,
-                suggestion,
-                checkpoint, 
-                'GraphSAGE', 
-                args.dataset
-            )
+            if checkpoint.should_stop:
+                print('!! Early Stopping !!')
+
+                break
+        if args.test_validation:
+                model.load_state_dict(checkpoint.best_epoch_model_parameters)
+
+                test_time, test_loss, test_score = validate(
+                    model, loss_function, evaluator, g, test_idx)
+
+                print(
+                    f'Test Loss: {test_loss:.2f} '
+                    f'Test Score: {test_score * 100:.2f} % '
+                    f'Test Epoch Time: {test_time:.2f}'
+                )
+
+        if experiment is not None:
+            metrics = {
+                    'best epoch': checkpoint.best_epoch,
+                    'best epoch - train loss': checkpoint.best_epoch_train_loss,
+                    'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+                    'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+                    'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+                    'best epoch - training time': checkpoint.best_epoch_training_time,
+                    'avg train epoch time': np.mean(checkpoint.train_times),
+                    'avg valid epoch time': np.mean(checkpoint.valid_times),
+                }
+            if args.test_validation:
+                if args.test_validation:
+                    metrics['best epoch - test loss'] = test_loss
+                    metrics['best epoch - test score'] = test_score
+                    metrics['test epoch time'] = test_time
+
+                utils.log_metrics_to_sigopt(
+                    sigopt_context,
+                    metrics,
+                )
+                
+            else:
+                print("FAILED - NOT TRAINING")
+                metrics = {
+                    'best epoch': 0,
+                    'best epoch - train loss': 0,
+                    'best epoch - train score': 0,
+                    'best epoch - valid loss': 0,
+                    'best epoch - valid score': 0,
+                    'best epoch - training time': 0,
+                    'avg train epoch time': 0,
+                    'avg valid epoch time': 0,
+                }
+
+                utils.log_metrics_to_sigopt(
+                    sigopt_context,
+                    metrics,
+                )
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE Optimization')
@@ -208,6 +231,7 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
+    argparser.add_argument('--project-id', default=None, type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -237,21 +261,15 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if args.sigopt_api_token is not None:
-            token = args.sigopt_api_token
-        else:
-            token = os.getenv('SIGOPT_API_TOKEN')
-
-            if token is None:
-                raise ValueError(
-                    'SigOpt API token is not provided. Please provide it by '
-                    '--sigopt-api-token argument or set '
-                    'SIGOPT_API_TOKEN environment variable.'
-                )
-
-        experiment = sigopt.Connection(token).experiments(args.experiment_id)
-
-        while utils.is_experiment_finished(experiment):
-            run(args, experiment)
+        if os.getenv('SIGOPT_API_TOKEN') is None:
+            raise ValueError(
+                'SigOpt API token is not provided. Please provide it by '
+                '--sigopt-api-token argument or set '
+                'SIGOPT_API_TOKEN environment variable.'
+            )
+        sigopt.set_project("graphsage")
+        experiment = sigopt.get_experiment(args.experiment_id)
+        while not experiment.is_finished():
+            run(args, experiment=experiment)
     else:
-        run(args)
+        run(args, experiment=None)

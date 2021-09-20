@@ -103,6 +103,5 @@ metrics:
     strategy: constraint
     objective: minimize
     threshold: 2449029
-project: 'full-graph-mini-batch'
-observation_budget: 200
-parallel_bandwidth: 4
+budget: 10
+parallel_bandwidth: 1
