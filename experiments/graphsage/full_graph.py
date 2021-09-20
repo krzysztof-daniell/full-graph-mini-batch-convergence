@@ -231,7 +231,7 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
-    argparser.add_argument('--project-id', default=None, type=str)
+    argparser.add_argument('--project-id', default="graphsage", type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -267,7 +267,7 @@ if __name__ == '__main__':
                 '--sigopt-api-token argument or set '
                 'SIGOPT_API_TOKEN environment variable.'
             )
-        sigopt.set_project("graphsage")
+        sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
         while not experiment.is_finished():
             run(args, experiment=experiment)
