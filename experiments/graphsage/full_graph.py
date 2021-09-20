@@ -167,59 +167,39 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
             if checkpoint.should_stop:
                 print('!! Early Stopping !!')
-
                 break
+
         if args.test_validation:
-                model.load_state_dict(checkpoint.best_epoch_model_parameters)
-
-                test_time, test_loss, test_score = validate(
-                    model, loss_function, evaluator, g, test_idx)
-
-                print(
-                    f'Test Loss: {test_loss:.2f} '
-                    f'Test Score: {test_score * 100:.2f} % '
-                    f'Test Epoch Time: {test_time:.2f}'
-                )
-
-        if experiment is not None:
+            model.load_state_dict(checkpoint.best_epoch_model_parameters)
+            test_time, test_loss, test_score = validate(
+                model, 
+                loss_function, 
+                evaluator, 
+                g, 
+                test_idx
+            )
+            print(
+                f'Test Loss: {test_loss:.2f} '
+                f'Test Score: {test_score * 100:.2f} % '
+                f'Test Epoch Time: {test_time:.2f}'
+            )
             metrics = {
-                    'best epoch': checkpoint.best_epoch,
-                    'best epoch - train loss': checkpoint.best_epoch_train_loss,
-                    'best epoch - train score': checkpoint.best_epoch_train_accuracy,
-                    'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
-                    'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
-                    'best epoch - training time': checkpoint.best_epoch_training_time,
-                    'avg train epoch time': np.mean(checkpoint.train_times),
-                    'avg valid epoch time': np.mean(checkpoint.valid_times),
-                }
-            if args.test_validation:
-                if args.test_validation:
-                    metrics['best epoch - test loss'] = test_loss
-                    metrics['best epoch - test score'] = test_score
-                    metrics['test epoch time'] = test_time
-
-                utils.log_metrics_to_sigopt(
-                    sigopt_context,
-                    metrics,
-                )
-                
-            else:
-                print("FAILED - NOT TRAINING")
-                metrics = {
-                    'best epoch': 0,
-                    'best epoch - train loss': 0,
-                    'best epoch - train score': 0,
-                    'best epoch - valid loss': 0,
-                    'best epoch - valid score': 0,
-                    'best epoch - training time': 0,
-                    'avg train epoch time': 0,
-                    'avg valid epoch time': 0,
-                }
-
-                utils.log_metrics_to_sigopt(
-                    sigopt_context,
-                    metrics,
-                )
+                'best epoch': checkpoint.best_epoch,
+                'best epoch - train loss': checkpoint.best_epoch_train_loss,
+                'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+                'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+                'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+                'best epoch - training time': checkpoint.best_epoch_training_time,
+                'avg train epoch time': np.mean(checkpoint.train_times),
+                'avg valid epoch time': np.mean(checkpoint.valid_times),
+                'best epoch - test loss': test_loss,
+                'best epoch - test score': test_score,
+                'test epoch time': test_time
+            }
+            utils.log_metrics_to_sigopt(
+                sigopt_context,
+                metrics,
+            )
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE Optimization')
@@ -231,7 +211,7 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
-    argparser.add_argument('--project-id', default="graphsage", type=str)
+    argparser.add_argument('--project-id', default=None, type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,

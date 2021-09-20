@@ -217,7 +217,6 @@ def run(
                     f'Test Epoch Time: {test_time:.2f}'
                 )
 
-            if experiment is not None:
                 metrics = {
                     'best epoch': checkpoint.best_epoch,
                     'best epoch - train loss': checkpoint.best_epoch_train_loss,
@@ -228,12 +227,10 @@ def run(
                     'avg train epoch time': np.mean(checkpoint.train_times),
                     'avg valid epoch time': np.mean(checkpoint.valid_times),
                     'max batch num nodes': max_batch_num_nodes,
+                    'best epoch - test loss': test_loss,
+                    'best epoch - test score': test_score,
+                    'test epoch time': test_time
                 }
-
-                if args.test_validation:
-                    metrics['best epoch - test loss'] = test_loss
-                    metrics['best epoch - test score'] = test_score
-                    metrics['test epoch time'] = test_time
 
                 utils.log_metrics_to_sigopt(
                     sigopt_context,
