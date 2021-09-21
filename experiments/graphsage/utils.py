@@ -180,13 +180,13 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
-    sigopt_context,
-    metrics,
+    sigopt_context: sigopt.run_context,
+    **metrics,
 ) -> None:
-    print("LOGGING METRICS")
-
     for name, value in metrics.items():
         sigopt_context.log_metric(name=name, value=value)
+
+    sigopt.log_image()
 
 
 def download_dataset(dataset: str) -> None:
