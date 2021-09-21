@@ -10,7 +10,7 @@ class GraphSAGE(nn.Module):
     def __init__(
         self,
         in_feats: int,
-        hidden_feats: int,
+        hidden_feats: Union[int, list[int]],
         out_feats: int,
         num_layers: int,
         aggregator_type: str = 'mean',
@@ -20,30 +20,34 @@ class GraphSAGE(nn.Module):
         activation: Callable[[torch.Tensor], torch.Tensor] = None,
     ):
         super().__init__()
-        self._hidden_feats = hidden_feats
-        self._out_feats = out_feats
         self._num_layers = num_layers
         self._input_dropout = nn.Dropout(input_dropout)
         self._dropout = nn.Dropout(dropout)
         self._activation = activation
 
+        if isinstance(hidden_feats, int):
+            self._hidden_feats = [hidden_feats for _ in range(num_layers - 1)]
+        else:
+            self._hidden_feats = hidden_feats
+
         self._layers = nn.ModuleList()
 
         self._layers.append(dglnn.SAGEConv(
-            in_feats, hidden_feats, aggregator_type))
+            in_feats, self._hidden_feats[0], aggregator_type))
 
-        for _ in range(1, num_layers - 1):
-            self._layers.append(dglnn.SAGEConv(
-                hidden_feats, hidden_feats, aggregator_type))
+        for i in range(1, num_layers - 1):
+            self._layers.append(dglnn.SAGEConv(self._hidden_feats[i - 1],
+                                self._hidden_feats[i], aggregator_type))
 
         self._layers.append(dglnn.SAGEConv(
-            hidden_feats, out_feats, aggregator_type))
+            self._hidden_feats[-1], out_feats, aggregator_type))
 
         if batch_norm:
             self._batch_norms = nn.ModuleList()
 
-            for _ in range(num_layers - 1):
-                self._batch_norms.append(nn.BatchNorm1d(hidden_feats))
+            for i in range(num_layers - 1):
+                self._batch_norms.append(nn.BatchNorm1d(self._hidden_feats[i]))
+
         else:
             self._batch_norms = None
 

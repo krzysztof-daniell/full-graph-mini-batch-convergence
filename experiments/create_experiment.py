@@ -7,7 +7,7 @@ import yaml
 
 def create_experiment(args: argparse.ArgumentParser) -> str:
     if args.sigopt_api_token is not None:
-        token = args.sigopt_api_token
+        os.environ['SIGOPT_API_TOKEN'] = f'{args.sigopt_api_token}'
     else:
         token = os.getenv('SIGOPT_API_TOKEN')
 
@@ -27,8 +27,6 @@ def create_experiment(args: argparse.ArgumentParser) -> str:
         experiment_metadata = yaml.load(f, Loader=yaml.FullLoader)
 
     sigopt.set_project(args.model)
-    #conn = sigopt.Connection(token)
-    #experiment = conn.experiments().create(**experiment_metadata)
     experiment = sigopt.create_experiment(**experiment_metadata)
 
     return experiment.id
@@ -36,7 +34,7 @@ def create_experiment(args: argparse.ArgumentParser) -> str:
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('Create SigOpt experiment')
-    
+
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--model', type=str, default='graphsage',
                            choices=['gat', 'graphsage', 'rgcn'])

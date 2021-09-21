@@ -7,9 +7,6 @@ def run_experiment(args: argparse.ArgumentParser):
 
     arguments = [f'--dataset {args.dataset}']
 
-    if args.sigopt_api_token is not None:
-        arguments.append(f'--sigopt-api-token {args.sigopt_api_token}')
-
     if args.experiment_id is not None:
         arguments.append(f'--experiment-id {args.experiment_id}')
 
@@ -22,8 +19,9 @@ def run_experiment(args: argparse.ArgumentParser):
         arguments.append('--no-test-validation')
 
     arguments = ' '.join(arguments)
+    env_vars = f'OMP_NUM_THREADS=20 SIGOPT_API_TOKEN={args.sigopt_api_token}'
 
-    os.system(f'OMP_NUM_THREADS=20 python {path} {arguments}')
+    os.system(f'{env_vars} python {path} {arguments}')
 
 
 if __name__ == '__main__':
