@@ -82,5 +82,5 @@ metrics:
     strategy: constraint
     objective: minimize
     threshold: 2449029
-budget: 50
+budget: 100
 parallel_bandwidth: 4
