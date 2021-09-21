@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from copy import deepcopy
 from typing import Union
 
@@ -12,7 +13,6 @@ import sigopt
 import torch
 import torch.nn as nn
 from ogb.nodeproppred import DglNodePropPredDataset, Evaluator
-
 
 class Callback:
     def __init__(
@@ -92,6 +92,7 @@ class Callback:
 
     def create(
         self,
+        sigopt_context,
         epoch: int,
         train_time: float,
         valid_time: float,
@@ -108,7 +109,8 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        sigopt.log_checkpoint({
+        print("LOGGING CHECKPOINT")
+        sigopt_context.log_checkpoint({
             'train loss': train_loss,
             'valid loss': valid_loss,
             'train accuracy': train_accuracy,
@@ -177,69 +179,17 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
-    experiment,
-    suggestion,
-    checkpoint: Callback,
-    model_name: str,
-    dataset: str,
-    test_loss: float = None,
-    test_accuracy: float = None,
-    test_time: float = None,
+    sigopt_context,
+    metrics,
 ) -> None:
-    values = [
-        # {'name': 'model', 'value': model_name},
-        # {'name': 'dataset', 'value': dataset},
-        {'name': 'best epoch', 'value': checkpoint.best_epoch},
-        {'name': 'best epoch - train loss',
-            'value': checkpoint.best_epoch_train_loss},
-        {'name': 'best epoch - train accuracy',
-            'value': checkpoint.best_epoch_train_accuracy},
-        {'name': 'best epoch - valid loss',
-            'value': checkpoint.best_epoch_valid_loss},
-        {'name': 'best epoch - valid accuracy',
-            'value': checkpoint.best_epoch_valid_accuracy},
-        {'name': 'best epoch - training time',
-            'value': checkpoint.best_epoch_training_time},
-        {'name': 'avg train epoch time',
-            'value': np.mean(checkpoint.train_times)},
-        {'name': 'avg valid epoch time',
-            'value': np.mean(checkpoint.valid_times)},
-    ]
-
-    if test_loss is not None:
-        values.append({'name': 'best epoch - test loss', 'value': test_loss})
-
-    if test_accuracy is not None:
-        values.append(
-            {'name': 'best epoch - test accuracy', 'value': test_accuracy})
-
-    if test_time is not None:
-        values.append({'name': 'test epoch time', 'value': test_time})
-
-    metrics_plot = get_metrics_plot(
-        checkpoint.train_accuracies,
-        checkpoint.valid_accuracies,
-        checkpoint.train_losses,
-        checkpoint.valid_losses,
-    )
-    # values.append({'name': 'convergence plot', 'value': metrics_plot})
-
-    experiment.observations().create(suggestion=suggestion.id, values=values)
-
-    metrics_plot = get_metrics_plot(
-        checkpoint.train_accuracies,
-        checkpoint.valid_accuracies,
-        checkpoint.train_losses,
-        checkpoint.valid_losses,
-    )
-
+    print("LOGGING METRICS")
+    values = [sigopt_context.log_metric(name=k, value=v) for k, v in metrics.items()]
 
 def download_dataset(dataset: str) -> None:
     if dataset == 'ogbn-products':
         command = 'aws s3 cp s3://ogb-products ./dataset --recursive'
         os.system(command)
         shutil.move('./dataset/ogbn_products', './dataset/ogbn_products_dgl')
-
 
 class OGBDataset:
     def __init__(
@@ -412,7 +362,6 @@ def set_sigopt_fanouts(fanouts: str) -> list[int]:
 
 
 def log_system_info() -> None:
-
     # https://psutil.readthedocs.io/en/latest/#processes
     process = psutil.Process()
     virtual_memory = psutil.virtual_memory()
@@ -446,9 +395,3 @@ def get_evaluation_score(
 
     return score
 
-
-def is_experiment_finished(experiment) -> bool:
-    observation_count = experiment.fetch().progress.observation_count
-    observation_budget = experiment.fetch().observation_budget
-
-    return observation_count <= observation_budget

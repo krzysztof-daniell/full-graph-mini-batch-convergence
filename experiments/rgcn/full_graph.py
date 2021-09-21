@@ -5,6 +5,7 @@ from timeit import default_timer
 
 import dgl
 import sigopt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -97,167 +98,161 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if experiment is not None:
-        suggestion = experiment.suggestions().create()
-        assignments = suggestion.assignments
+    with experiment.create_run() as sigopt_context:
+        sigopt_context.params.setdefaults(dict(
     
-        embedding_lr = assignments['embedding_lr']
-        model_lr = assignments['model_lr']
-        hidden_feats = assignments['hidden_feats']
-        num_bases = assignments['num_bases']
-        num_layers = assignments['num_layers']
-        norm = assignments['norm']
-        batch_norm = bool(assignments['batch_norm'])
-        activation = assignments['activation']
-        input_dropout = assignments['input_dropout']
-        dropout = assignments['dropout']
-        self_loop = bool(assignments['self_loop'])
-    else: 
-        embedding_lr = args.embedding_lr
-        model_lr = args.model_lr
-        hidden_feats = args.hidden_feats
-        num_bases = args.num_bases
-        num_layers = args.num_layers
-        norm = args.norm
-        batch_norm = int(args.batch_norm)
-        activation = args.activation
-        input_dropout = args.input_dropout
-        dropout = args.dropout
-        self_loop = int(args.self_loop)
+            embedding_lr = args.embedding_lr,
+            model_lr = args.model_lr,
+            hidden_feats = args.hidden_feats,
+            num_bases = args.num_bases,
+            num_layers = args.num_layers,
+            norm = args.norm,
+            batch_norm = int(args.batch_norm),
+            activation = args.activation,
+            input_dropout = args.input_dropout,
+            dropout = args.dropout,
+            self_loop = int(args.self_loop)
+        ))
 
+        in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
+        out_feats = dataset.num_classes
 
-    in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
-    out_feats = dataset.num_classes
+        num_nodes = {}
+        node_feats = {}
 
-    num_nodes = {}
-    node_feats = {}
+        for ntype in hg.ntypes:
+            num_nodes[ntype] = hg.num_nodes(ntype)
+            node_feats[ntype] = hg.nodes[ntype].data.get('feat')
 
-    for ntype in hg.ntypes:
-        num_nodes[ntype] = hg.num_nodes(ntype)
-        node_feats[ntype] = hg.nodes[ntype].data.get('feat')
+        activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
-
-    embedding_layer = RelGraphEmbedding(
-        hg,
-        in_feats,
-        num_nodes,
-        node_feats,
-    )
-    model = EntityClassify(
-        hg,
-        in_feats,
-        hidden_feats,
-        out_feats,
-        num_bases,
-        num_layers,
-        norm=norm,
-        batch_norm=batch_norm,
-        input_dropout=input_dropout,
-        dropout=dropout,
-        activation=activations[activation],
-        self_loop=self_loop,
-    )
-
-    loss_function = nn.CrossEntropyLoss().to(device)
-    embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
-    model_optimizer = torch.optim.Adam(
-        model.parameters(), lr=model_lr)
-
-    checkpoint = utils.Callback(args.early_stopping_patience,
-                                args.early_stopping_monitor)
-
-    for epoch in range(args.num_epochs):
-        train_time, train_loss, train_score = train(
-            embedding_layer,
-            model,
-            embedding_optimizer,
-            model_optimizer,
-            loss_function,
-            evaluator,
+        embedding_layer = RelGraphEmbedding(
             hg,
-            labels,
-            predict_category,
-            train_idx,
+            in_feats,
+            num_nodes,
+            node_feats,
         )
-        valid_time, valid_loss, valid_score = validate(
-            embedding_layer,
-            model,
-            loss_function,
-            evaluator,
+        model = EntityClassify(
             hg,
-            labels,
-            predict_category,
-            valid_idx,
+            in_feats,
+            sigopt_context.params.hidden_feats,
+            out_feats,
+            sigopt_context.params.num_bases,
+            sigopt_context.params.num_layers,
+            norm=sigopt_context.params.norm,
+            batch_norm=sigopt_context.params.batch_norm,
+            input_dropout=sigopt_context.params.input_dropout,
+            dropout=sigopt_context.params.dropout,
+            activation=activations[sigopt_context.params.activation],
+            self_loop=sigopt_context.params.self_loop,
         )
 
-        checkpoint.create(
-            epoch,
-            train_time,
-            valid_time,
-            train_loss,
-            valid_loss,
-            train_score,
-            valid_score,
-            {'embedding_layer': embedding_layer, 'model': model},
+        loss_function = nn.CrossEntropyLoss().to(device)
+        embedding_optimizer = torch.optim.SparseAdam(list(
+            embedding_layer.node_embeddings.parameters()), 
+            lr=sigopt_context.params.embedding_lr
+        )
+        model_optimizer = torch.optim.Adam(
+            model.parameters(), 
+            lr=sigopt_context.params.model_lr
         )
 
-        print(
-            f'Epoch: {epoch + 1:03} '
-            f'Train Loss: {train_loss:.2f} '
-            f'Valid Loss: {valid_loss:.2f} '
-            f'Train Accuracy: {train_score:.4f} '
-            f'Valid Accuracy: {valid_score:.4f} '
-            f'Train Epoch Time: {train_time:.2f} '
-            f'Valid Epoch Time: {valid_time:.2f}'
+        checkpoint = utils.Callback(
+            args.early_stopping_patience,
+            args.early_stopping_monitor
         )
 
-        if checkpoint.should_stop:
-            print('!! Early Stopping !!')
+        for epoch in range(args.num_epochs):
+            train_time, train_loss, train_score = train(
+                embedding_layer,
+                model,
+                embedding_optimizer,
+                model_optimizer,
+                loss_function,
+                evaluator,
+                hg,
+                labels,
+                predict_category,
+                train_idx,
+            )
+            valid_time, valid_loss, valid_score = validate(
+                embedding_layer,
+                model,
+                loss_function,
+                evaluator,
+                hg,
+                labels,
+                predict_category,
+                valid_idx,
+            )
 
-            break
+            checkpoint.create(
+                sigopt_context,
+                epoch,
+                train_time,
+                valid_time,
+                train_loss,
+                valid_loss,
+                train_score,
+                valid_score,
+                {'embedding_layer': embedding_layer, 'model': model},
+            )
 
-    if args.test_validation:
-        embedding_layer.load_state_dict(
-            checkpoint.best_epoch_model_parameters['embedding_layer'])
-        model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
+            print(
+                f'Epoch: {epoch + 1:03} '
+                f'Train Loss: {train_loss:.2f} '
+                f'Valid Loss: {valid_loss:.2f} '
+                f'Train Accuracy: {train_score:.4f} '
+                f'Valid Accuracy: {valid_score:.4f} '
+                f'Train Epoch Time: {train_time:.2f} '
+                f'Valid Epoch Time: {valid_time:.2f}'
+            )
 
-        test_time, test_loss, test_score = validate(
-            embedding_layer,
-            model,
-            loss_function,
-            evaluator,
-            hg,
-            labels,
-            predict_category,
-            test_idx,
-        )
+            if checkpoint.should_stop:
+                print('!! Early Stopping !!')
 
-        print(
-            f'Test Loss: {test_loss:.2f} '
-            f'Test Score: {test_score:.4f} '
-            f'Test Epoch Time: {test_time:.2f}'
-        )
+                break
 
-        utils.log_metrics_to_sigopt(
-            experiment,
-            suggestion,
-            checkpoint,
-            'RGCN',
-            args.dataset,
-            test_loss,
-            test_score,
-            test_time,
-        )
-    else:
-        utils.log_metrics_to_sigopt(
-            experiment,
-            suggestion,
-            checkpoint, 
-            'RGCN', 
-            args.dataset
-        )
+        if args.test_validation:
+            embedding_layer.load_state_dict(
+                checkpoint.best_epoch_model_parameters['embedding_layer'])
+            model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
+
+            test_time, test_loss, test_score = validate(
+                embedding_layer,
+                model,
+                loss_function,
+                evaluator,
+                hg,
+                labels,
+                predict_category,
+                test_idx,
+            )
+
+            print(
+                f'Test Loss: {test_loss:.2f} '
+                f'Test Score: {test_score:.4f} '
+                f'Test Epoch Time: {test_time:.2f}'
+            )
+
+            metrics = {
+                'best epoch': checkpoint.best_epoch,
+                'best epoch - train loss': checkpoint.best_epoch_train_loss,
+                'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+                'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+                'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+                'best epoch - training time': checkpoint.best_epoch_training_time,
+                'avg train epoch time': np.mean(checkpoint.train_times),
+                'avg valid epoch time': np.mean(checkpoint.valid_times),
+                'best epoch - test loss': test_loss,
+                'best epoch - test score': test_score,
+                'test epoch time': test_time
+            }
+
+            utils.log_metrics_to_sigopt(
+                sigopt_context,
+                metrics,
+            )
 
 
 if __name__ == '__main__':
@@ -270,6 +265,7 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
+    argparser.add_argument('--project-id', default="rgcn", type=str)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
@@ -299,21 +295,15 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if args.sigopt_api_token is not None:
-            token = args.sigopt_api_token
-        else:
-            token = os.getenv('SIGOPT_API_TOKEN')
-
-            if token is None:
-                raise ValueError(
-                    'SigOpt API token is not provided. Please provide it by '
-                    '--sigopt-api-token argument or set '
-                    'SIGOPT_API_TOKEN environment variable.'
-                )
-
-        experiment = sigopt.Connection(token).experiments(args.experiment_id)
-
-        while utils.is_experiment_finished(experiment):
-            run(args, experiment)
+        if os.getenv('SIGOPT_API_TOKEN') is None:
+            raise ValueError(
+                'SigOpt API token is not provided. Please provide it by '
+                '--sigopt-api-token argument or set '
+                'SIGOPT_API_TOKEN environment variable.'
+            )
+        sigopt.set_project(args.project_id)
+        experiment = sigopt.get_experiment(args.experiment_id)
+        while not experiment.is_finished():
+            run(args, experiment=experiment)
     else:
-        run(args)
+        run(args, experiment=None)

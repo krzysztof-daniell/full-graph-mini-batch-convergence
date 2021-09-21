@@ -97,7 +97,6 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
     with experiment.create_run() as sigopt_context:
 
         sigopt_context.params.setdefaults(dict(
@@ -340,6 +339,7 @@ if __name__ == '__main__':
 
     if args.download_dataset:
         utils.download_dataset(args.dataset)
+        
     if args.experiment_id is not None:
         if os.getenv('SIGOPT_API_TOKEN') is None:
             raise ValueError(
