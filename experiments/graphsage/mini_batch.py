@@ -308,6 +308,8 @@ def run(
 
         utils.log_metrics_to_sigopt(sigopt_context, **metrics)
 
+        sigopt_context.end()
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -336,8 +338,8 @@ if __name__ == '__main__':
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['leaky_relu', 'relu'])
     argparser.add_argument('--batch-size', default=1000, type=int)
-    argparser.add_argument(
-        '--fanouts', default=[5, 10, 15], nargs='+', type=str)
+    argparser.add_argument('--fanouts', default=[5, 10, 15],
+                           nargs='+', type=str)
     argparser.add_argument('--num-workers', default=4, type=int)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
@@ -364,9 +366,6 @@ if __name__ == '__main__':
 
         while not experiment.is_finished():
             with experiment.create_run() as sigopt_context:
-                try:
-                    run(args, sigopt_context=sigopt_context)
-                except:
-                    sigopt_context.log_failure()
+                run(args, sigopt_context=sigopt_context)
     else:
         run(args)
