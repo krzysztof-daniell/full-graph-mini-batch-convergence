@@ -306,7 +306,7 @@ def run(
             metrics['best epoch - test score'] = test_score
             metrics['test epoch time'] = test_time
 
-        utils.log_metrics_to_sigopt(sigopt_context, metrics)
+        utils.log_metrics_to_sigopt(sigopt_context, **metrics)
 
 
 if __name__ == '__main__':
