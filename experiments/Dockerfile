@@ -4,7 +4,8 @@ WORKDIR /root
 
 COPY ./requirements.txt ./
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+  && pip install --no-cache-dir git+https://github.com/sigopt/sigopt-python@sj/main 
 
 ENV http_proxy=${http_proxy}
 ENV https_proxy=${https_proxy}
