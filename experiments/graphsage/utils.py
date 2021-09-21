@@ -186,8 +186,6 @@ def log_metrics_to_sigopt(
     for name, value in metrics.items():
         sigopt_context.log_metric(name=name, value=value)
 
-    sigopt.log_image()
-
 
 def download_dataset(dataset: str) -> None:
     if dataset == 'ogbn-products':
