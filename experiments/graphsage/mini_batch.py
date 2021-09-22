@@ -140,29 +140,6 @@ def run(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        sigopt_context.params.setdefaults({
-            'lr': args.lr,
-            'num_layers': args.num_layers,
-            'aggregator_type': args.aggregator_type,
-            'batch_norm': int(args.batch_norm),
-            'activation': args.activation,
-            'input_dropout': args.input_dropout,
-            'dropout': args.dropout,
-            'batch_size': args.batch_size,
-        })
-
-        # for i, fanout in enumerate(args.fanouts):
-        #     sigopt.params.setdefault(f'fanout_layer_{i + 1}', fanout)
-
-        for i in range(args.num_layers - 1):
-            if isinstance(args.hidden_feats, int):
-                hidden_feats = args.hidden_feats
-            else:
-                hidden_feats = args.hidden_feats[i]
-
-            sigopt_context.params.setdefault(
-                f'hidden_feats_layer_{i + 1}', hidden_feats)
-
         lr = sigopt_context.params['lr']
         num_layers = int(sigopt_context.params['num_layers'])
         hidden_feats = [sigopt_context.params[f'hidden_feats_layer_{i + 1}']
@@ -365,15 +342,6 @@ if __name__ == '__main__':
         experiment = sigopt.get_experiment(args.experiment_id)
 
         while not experiment.is_finished():
-            # sigopt_context = sigopt.create_run()
-
-            # try:
-            #     run(args, sigopt_context=sigopt_context)
-            # except:
-            #     sigopt_context.log_failure()
-
-            # sigopt_context.end()
-
             with experiment.create_run() as sigopt_context:
                 try:
                     run(args, sigopt_context=sigopt_context)
