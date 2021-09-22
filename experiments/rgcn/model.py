@@ -174,7 +174,8 @@ class EntityClassify(nn.Module):
         self,
         hg: dgl.DGLHeteroGraph,
         in_feats: int,
-        hidden_feats: int,
+        # hidden_feats: int,
+        hidden_feats: Union[int, list[int]],
         out_feats: int,
         num_bases: int,
         num_layers: int,
@@ -193,6 +194,11 @@ class EntityClassify(nn.Module):
         self._rel_names = sorted(list(set(hg.etypes)))
         self._num_rels = len(self._rel_names)
 
+        if isinstance(hidden_feats, int):
+            self._hidden_feats = [hidden_feats for _ in range(num_layers - 1)]
+        else:
+            self._hidden_feats = hidden_feats
+
         if num_bases < 0 or num_bases > self._num_rels:
             self._num_bases = self._num_rels
         else:
@@ -209,10 +215,10 @@ class EntityClassify(nn.Module):
             self_loop=self_loop,
         ))
 
-        for _ in range(1, num_layers - 1):
+        for i in range(1, num_layers - 1):
             self._layers.append(RelGraphConvLayer(
-                hidden_feats,
-                hidden_feats,
+                self._hidden_feats[i - 1],
+                self._hidden_feats[i],
                 self._rel_names,
                 self._num_bases,
                 norm=norm,
@@ -220,7 +226,7 @@ class EntityClassify(nn.Module):
             ))
 
         self._layers.append(RelGraphConvLayer(
-            hidden_feats,
+            hidden_feats[-1],
             out_feats,
             self._rel_names,
             self._num_bases,
