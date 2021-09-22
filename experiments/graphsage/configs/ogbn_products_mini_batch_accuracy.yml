@@ -78,9 +78,5 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-  - name: max batch num nodes
-    strategy: constraint
-    objective: minimize
-    threshold: 2449029
 budget: 100
 parallel_bandwidth: 4
