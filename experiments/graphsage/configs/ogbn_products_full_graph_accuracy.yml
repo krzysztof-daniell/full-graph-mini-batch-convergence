@@ -1,8 +1,5 @@
 # ogbn_products_full_graph_accuracy.yml
 name: graphsage - ogbn-products - full-graph - accuracy
-conditionals:
-  - name: num_layers
-    values: ['2', '3', '4', '5']
 parameters: 
   - name: lr
     type: double
@@ -10,25 +7,13 @@ parameters:
     bounds:
       min: 0.0001
       max: 0.05
-  - name: hidden_feats_layer_1
+  - name: num_layers
     type: int
-    conditions: 
-      num_layers: ['2', '3', '4', '5']
-    grid: [16, 32, 64, 128, 256, 512]
-  - name: hidden_feats_layer_2
+    bounds:
+      min: 2
+      max: 5
+  - name: hidden_feats
     type: int
-    conditions: 
-      num_layers: ['3', '4', '5']
-    grid: [16, 32, 64, 128, 256, 512]
-  - name: hidden_feats_layer_3
-    type: int
-    conditions: 
-      num_layers: ['4', '5']
-    grid: [16, 32, 64, 128, 256, 512]
-  - name: hidden_feats_layer_4
-    type: int
-    conditions: 
-      num_layers: ['5']
     grid: [16, 32, 64, 128, 256, 512]
   - name: aggregator_type
     type: categorical
