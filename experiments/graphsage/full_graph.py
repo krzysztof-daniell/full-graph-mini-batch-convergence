@@ -92,7 +92,7 @@ def run(
     if sigopt_context is not None:
         lr = sigopt_context.params.lr
         hidden_feats = sigopt_context.params.hidden_feats
-        num_layers = int(sigopt_context.params.num_layers)
+        num_layers = sigopt_context.params.num_layers
         aggregator_type = sigopt_context.params.aggregator_type
         batch_norm = sigopt_context.params.batch_norm
         activation = sigopt_context.params.activation
