@@ -387,7 +387,8 @@ if __name__ == '__main__':
     argparser.add_argument('--bias', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--batch-size', default=512, type=int)
-    argparser.add_argument('--fanouts', default='10,10,10', type=str)
+    argparser.add_argument('--fanouts', default=[5, 10, 15],
+                           nargs='+', type=str)    
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)

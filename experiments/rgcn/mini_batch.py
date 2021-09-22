@@ -371,7 +371,8 @@ if __name__ == '__main__':
     argparser.add_argument('--self-loop', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--batch-size', default=1024, type=int)
-    argparser.add_argument('--fanouts', default='25,20', type=str)
+    argparser.add_argument('--fanouts', default=[5, 10, 15],
+                           nargs='+', type=str)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)
