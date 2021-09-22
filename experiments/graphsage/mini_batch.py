@@ -150,9 +150,6 @@ def run(
         input_dropout = sigopt_context.params['input_dropout']
         dropout = sigopt_context.params['dropout']
         batch_size = sigopt_context.params['batch_size']
-        # fanouts = [sigopt_context.params[f'fanout_layer_{i + 1}']
-        #            for i in range(num_layers)]
-
         fanouts = set_fanouts(
             num_layers,
             batch_size,
@@ -165,6 +162,7 @@ def run(
 
         print(f'{sigopt_context.params = }')
         print(f'{fanouts = }')
+        
     else:
         lr = args.lr
         num_layers = args.num_layers

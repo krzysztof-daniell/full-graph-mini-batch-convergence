@@ -74,7 +74,10 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser, experiment=None) -> None:
+def run(
+    args: argparse.ArgumentParser, 
+    sigopt_context: sigopt.run_context = None,
+) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -86,120 +89,128 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    with experiment.create_run() as sigopt_context:
-    
-        sigopt_context.params.setdefaults(dict(
-            lr = args.lr,
-            hidden_feats = args.hidden_feats,
-            num_layers = args.num_layers,
-            aggregator_type = args.aggregator_type,
-            batch_norm = args.batch_norm,
-            activation = args.activation,
-            input_dropout = args.input_dropout,
-            dropout = args.dropout
-        ))
+    if sigopt_context is not None:
+        lr = sigopt_context.params.lr
+        hidden_feats = sigopt_context.params.hidden_feats
+        num_layers = int(sigopt_context.params.num_layers)
+        aggregator_type = sigopt_context.params.aggregator_type
+        batch_norm = sigopt_context.params.batch_norm
+        activation = sigopt_context.params.activation
+        input_dropout = sigopt_context.params.input_dropout
+        dropout = sigopt_context.params.dropout
+    else: 
+        lr = args.lr
+        hidden_feats = args.hidden_feats
+        num_layers = args.num_layers
+        aggregator_type = args.aggregator_type
+        batch_norm = args.batch_norm
+        activation = args.activation
+        input_dropout = args.input_dropout
+        dropout = args.dropout
 
-        in_feats = g.ndata['feat'].shape[-1]
-        out_feats = dataset.num_classes
+    in_feats = g.ndata['feat'].shape[-1]
+    out_feats = dataset.num_classes
 
-        activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-        model = GraphSAGE(
-            in_feats,
-            sigopt_context.params.hidden_feats,
-            out_feats,
-            int(sigopt_context.params.num_layers),
-            aggregator_type=sigopt_context.params.aggregator_type,
-            batch_norm=sigopt_context.params.batch_norm,
-            input_dropout=sigopt_context.params.input_dropout,
-            dropout=sigopt_context.params.dropout,
-            activation=activations[sigopt_context.params.activation],
-        ).to(device)
+    model = GraphSAGE(
+        in_feats,
+        hidden_feats,
+        out_feats,
+        num_layers,
+        aggregator_type=aggregator_type,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        dropout=dropout,
+        activation=activations[activation],
+    ).to(device)
 
-        if args.dataset == 'ogbn-proteins':
-            loss_function = nn.BCEWithLogitsLoss().to(device)
-        else:
-            loss_function = nn.CrossEntropyLoss().to(device)
+    if args.dataset == 'ogbn-proteins':
+        loss_function = nn.BCEWithLogitsLoss().to(device)
+    else:
+        loss_function = nn.CrossEntropyLoss().to(device)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=sigopt_context.params.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-        checkpoint = utils.Callback(args.early_stopping_patience,
-                                    args.early_stopping_monitor)
+    checkpoint = utils.Callback(args.early_stopping_patience,
+                                args.early_stopping_monitor)
 
-        for epoch in range(args.num_epochs):
-            train_time, train_loss, train_score = train(
-                model, 
-                optimizer,
-                loss_function, 
-                evaluator, 
-                g, 
-                train_idx
-            )
-            valid_time, valid_loss, valid_score = validate(
-                model, 
-                loss_function, 
-                evaluator, 
-                g, 
-                valid_idx
-            )
+    for epoch in range(args.num_epochs):
+        train_time, train_loss, train_score = train(
+            model, 
+            optimizer,
+            loss_function, 
+            evaluator, 
+            g, 
+            train_idx
+        )
+        valid_time, valid_loss, valid_score = validate(
+            model, 
+            loss_function, 
+            evaluator, 
+            g, 
+            valid_idx
+        )
 
-            checkpoint.create(
-                sigopt_context,
-                epoch,
-                train_time,
-                valid_time,
-                train_loss,
-                valid_loss,
-                train_score,
-                valid_score,
-                model,
-            )
+        checkpoint.create(
+            epoch,
+            train_time,
+            valid_time,
+            train_loss,
+            valid_loss,
+            train_score,
+            valid_score,
+            model,
+            sigopt_context=sigopt_context
+        )
 
-            print(
-                f'Epoch: {epoch + 1:03} '
-                f'Train Loss: {train_loss:.2f} '
-                f'Valid Loss: {valid_loss:.2f} '
-                f'Train Score: {train_score:.4f} '
-                f'Valid Score: {valid_score:.4f} '
-                f'Train Epoch Time: {train_time:.2f} '
-                f'Valid Epoch Time: {valid_time:.2f}'
-            )
+        print(
+            f'Epoch: {epoch + 1:03} '
+            f'Train Loss: {train_loss:.2f} '
+            f'Valid Loss: {valid_loss:.2f} '
+            f'Train Score: {train_score:.4f} '
+            f'Valid Score: {valid_score:.4f} '
+            f'Train Epoch Time: {train_time:.2f} '
+            f'Valid Epoch Time: {valid_time:.2f}'
+        )
 
-            if checkpoint.should_stop:
-                print('!! Early Stopping !!')
-                break
+        if checkpoint.should_stop:
+            print('!! Early Stopping !!')
+            break
 
-        if args.test_validation:
-            model.load_state_dict(checkpoint.best_epoch_model_parameters)
-            test_time, test_loss, test_score = validate(
-                model, 
-                loss_function, 
-                evaluator, 
-                g, 
-                test_idx
-            )
-            print(
-                f'Test Loss: {test_loss:.2f} '
-                f'Test Score: {test_score * 100:.2f} % '
-                f'Test Epoch Time: {test_time:.2f}'
-            )
-            metrics = {
-                'best epoch': checkpoint.best_epoch,
-                'best epoch - train loss': checkpoint.best_epoch_train_loss,
-                'best epoch - train score': checkpoint.best_epoch_train_accuracy,
-                'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
-                'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
-                'best epoch - training time': checkpoint.best_epoch_training_time,
-                'avg train epoch time': np.mean(checkpoint.train_times),
-                'avg valid epoch time': np.mean(checkpoint.valid_times),
-                'best epoch - test loss': test_loss,
-                'best epoch - test score': test_score,
-                'test epoch time': test_time
-            }
-            utils.log_metrics_to_sigopt(
-                sigopt_context,
-                metrics,
-            )
+    if args.test_validation:
+        model.load_state_dict(checkpoint.best_epoch_model_parameters)
+        test_time, test_loss, test_score = validate(
+            model, 
+            loss_function, 
+            evaluator, 
+            g, 
+            test_idx
+        )
+        print(
+            f'Test Loss: {test_loss:.2f} '
+            f'Test Score: {test_score * 100:.2f} % '
+            f'Test Epoch Time: {test_time:.2f}'
+        )
+    if sigopt_context is not None:
+        metrics = {
+            'best epoch': checkpoint.best_epoch,
+            'best epoch - train loss': checkpoint.best_epoch_train_loss,
+            'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+            'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+            'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+            'best epoch - training time': checkpoint.best_epoch_training_time,
+            'avg train epoch time': np.mean(checkpoint.train_times),
+            'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'best epoch - test loss': test_loss,
+            'best epoch - test score': test_score,
+            'test epoch time': test_time
+        }
+        utils.log_metrics_to_sigopt(
+            sigopt_context,
+            metrics,
+        )
+        sigopt_context.end()
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE Optimization')
@@ -250,6 +261,10 @@ if __name__ == '__main__':
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
         while not experiment.is_finished():
-            run(args, experiment=experiment)
+            with experiment.create_run() as sigopt_context:
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
     else:
-        run(args, experiment=None)
+        run(args)

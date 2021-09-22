@@ -9,9 +9,12 @@ parameters:
     bounds:
       min: .0001
       max: .05
-  - name: hidden_feats
+  - name: node_hidden_feats
     type: int
-    grid: [8, 16, 32, 64, 128, 256]
+    grid: [8, 16, 32, 64, 128, 256, 512]
+  - name: edge_hidden_feats
+    type: int
+    grid: [8, 16, 32, 64, 128, 256, 512]
   - name: number_of_layers
     type: int
     bounds:
@@ -86,5 +89,5 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-budget: 20
-parallel_bandwidth: 2
+budget: 100
+parallel_bandwidth: 4

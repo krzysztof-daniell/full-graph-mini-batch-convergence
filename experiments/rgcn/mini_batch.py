@@ -95,7 +95,48 @@ def validate(
 
     return time, loss, score
 
-def run(args: argparse.ArgumentParser, experiment = None) -> None:
+def set_fanouts(
+    num_layers: int,
+    batch_size: int,
+    max_num_batch_nodes: int,
+    fanout_slope: float,
+    max_fanout: int = 40,
+) -> list[int]:
+    result_fanouts = None
+
+    for base_fanout in range(max_fanout + 1):
+        fanouts = []
+
+        for n in range(num_layers):
+            fanout = int((fanout_slope ** n) * base_fanout)
+
+            if fanout < 1:
+                fanout = 1
+
+            if fanout > max_fanout:
+                break
+
+            fanouts.append(fanout)
+
+        if len(fanouts) == num_layers:
+            result = batch_size
+
+            for fanout in reversed(fanouts):
+                result += result * fanout
+
+            if result <= max_num_batch_nodes:
+                result_fanouts = fanouts
+
+    if result_fanouts is None:
+        result_fanouts = [1 for _ in range(num_layers)]
+
+    return result_fanouts
+
+
+def run(
+    args: argparse.ArgumentParser,
+    sigopt_context: sigopt.run_context = None,
+) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -107,208 +148,200 @@ def run(args: argparse.ArgumentParser, experiment = None) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    with experiment.create_run() as sigopt_context:
+    
+    if sigopt_context is not None:
 
-        sigopt_context.params.setdefaults(dict(
+        embedding_lr = sigopt_context.params.embedding_lr
+        model_lr = sigopt_context.params.model_lr
+        hidden_feats = sigopt_context.params.hidden_feats
+        num_bases = sigopt_context.params.num_bases
+        num_layers = sigopt_context.params.num_layers
+        norm = sigopt_context.params.norm
+        batch_norm = bool(sigopt_context.params.batch_norm)
+        activation = sigopt_context.params.activation
+        input_dropout = sigopt_context.params.input_dropout
+        dropout = sigopt_context.params.dropout
+        self_loop = bool(sigopt_context.params.self_loop)
+        batch_size = sigopt_context.params.batch_size
+        fanouts = set_fanouts(
+            num_layers,
+            batch_size,
+            sigopt_context.params['max_batch_num_nodes'],
+            sigopt_context.params['fanout_slope'],
+        )
 
-
-            #fanouts = [int(i) for i in args.fanouts.split(',')]
-            embedding_lr = args.embedding_lr,
-            model_lr = args.model_lr,
-            hidden_feats = args.hidden_feats,
-            num_bases = args.num_bases,
-            num_layers = args.num_layers,
-            norm = args.norm,
-            batch_norm = int(args.batch_norm),
-            activation = args.activation,
-            input_dropout = args.input_dropout,
-            dropout = args.dropout,
-            self_loop = int(args.self_loop),
-            batch_size = args.batch_size
+        sigopt_context.log_metadata(
+            'fanouts', ','.join([str(i) for i in fanouts]))
         
-        ))
+        print(f'{sigopt_context.params = }')
+        print(f'{fanouts = }')
+    else:
+        #fanouts = [int(i) for i in args.fanouts.split(',')]
+        embedding_lr = args.embedding_lr
+        model_lr = args.model_lr
+        hidden_feats = args.hidden_feats
+        num_bases = args.num_bases
+        num_layers = args.num_layers
+        norm = args.norm
+        batch_norm = args.batch_norm
+        activation = args.activation
+        input_dropout = args.input_dropout
+        dropout = args.dropout
+        self_loop = args.self_loop
+        batch_size = args.batch_size
+        fanouts = args.fanouts
+      
+    sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
+    train_dataloader = dgl.dataloading.NodeDataLoader(
+        hg,
+        {predict_category: train_idx},
+        sampler,
+        batch_size=batch_size,
+        shuffle=True,
+        drop_last=False,
+        num_workers=4,
+    )
 
-        for i in range(int(sigopt_context.params.num_layers)):
-            sigopt_context.params.setdefault(f'layer_{i + 1}_fanout', 10)
-        fanouts = [sigopt_context.params[f'layer_{i + 1}_fanout']
-                   for i in range(int(sigopt_context.params.num_layers))]
+    in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
+    out_feats = dataset.num_classes
+    num_nodes = {}
+    node_feats = {}
 
-        max_batch_num_nodes = np.prod(fanouts) * sigopt_context.params.batch_size
-        train_flag = True
-        if max_batch_num_nodes > g.num_nodes():
-            train_flag = False
-        if train_flag:
+    for ntype in hg.ntypes:
+        num_nodes[ntype] = hg.num_nodes(ntype)
+        node_feats[ntype] = hg.nodes[ntype].data.get('feat')
 
-            sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
-            train_dataloader = dgl.dataloading.NodeDataLoader(
-                hg,
-                {predict_category: train_idx},
-                sampler,
-                batch_size=sigopt_context.params.batch_size,
-                shuffle=True,
-                drop_last=False,
-                num_workers=4,
-            )
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-            in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
-            out_feats = dataset.num_classes
-            num_nodes = {}
-            node_feats = {}
+    embedding_layer = RelGraphEmbedding(
+        hg,
+        in_feats,
+        num_nodes,
+        node_feats,
+    )
 
-            for ntype in hg.ntypes:
-                num_nodes[ntype] = hg.num_nodes(ntype)
-                node_feats[ntype] = hg.nodes[ntype].data.get('feat')
+    model = EntityClassify(
+        hg,
+        in_feats,
+        hidden_feats,
+        out_feats,
+        num_bases,
+        num_layers,
+        norm=norm,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        dropout=dropout,
+        activation=activations[activation],
+        self_loop=self_loop,
+    )
 
-            activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
+    loss_function = nn.CrossEntropyLoss().to(device)
+    embedding_optimizer = torch.optim.SparseAdam(list(
+        embedding_layer.node_embeddings.parameters()), 
+        lr=embedding_lr
+    )
+    model_optimizer = torch.optim.Adam(
+        model.parameters(), 
+        lr=model_lr
+    )
 
-            embedding_layer = RelGraphEmbedding(
-                hg,
-                in_feats,
-                num_nodes,
-                node_feats,
-            )
+    checkpoint = utils.Callback(
+        args.early_stopping_patience,
+        args.early_stopping_monitor
+    )
 
-            model = EntityClassify(
-                hg,
-                in_feats,
-                sigopt_context.params.hidden_feats,
-                out_feats,
-                sigopt_context.params.num_bases,
-                sigopt_context.params.num_layers,
-                norm=sigopt_context.params.norm,
-                batch_norm=sigopt_context.params.batch_norm,
-                input_dropout=sigopt_context.params.input_dropout,
-                dropout=sigopt_context.params.dropout,
-                activation=activations[sigopt_context.params.activation],
-                self_loop=sigopt_context.params.self_loop,
-            )
+    for epoch in range(args.num_epochs):
+        train_time, train_loss, train_score = train(
+            embedding_layer,
+            model,
+            device,
+            embedding_optimizer,
+            model_optimizer,
+            loss_function,
+            evaluator,
+            train_dataloader,
+            labels,
+            predict_category,
+        )
+        valid_time, valid_loss, valid_score = validate(
+            embedding_layer,
+            model,
+            loss_function,
+            evaluator,
+            hg,
+            labels,
+            predict_category,
+            valid_idx,
+        )
 
-            loss_function = nn.CrossEntropyLoss().to(device)
-            embedding_optimizer = torch.optim.SparseAdam(list(
-                embedding_layer.node_embeddings.parameters()), 
-                lr=sigopt_context.params.embedding_lr
-            )
-            model_optimizer = torch.optim.Adam(
-                model.parameters(), 
-                lr=sigopt_context.params.model_lr
-            )
+        checkpoint.create(
+            epoch,
+            train_time,
+            valid_time,
+            train_loss,
+            valid_loss,
+            train_score,
+            valid_score,
+            {'embedding_layer': embedding_layer, 'model': model},
+            sigopt_context=sigopt_context
+        )
 
-            checkpoint = utils.Callback(
-                args.early_stopping_patience,
-                args.early_stopping_monitor
-            )
+        print(
+            f'Epoch: {epoch + 1:03} '
+            f'Train Loss: {train_loss:.2f} '
+            f'Valid Loss: {valid_loss:.2f} '
+            f'Train Score: {train_score:.4f} '
+            f'Valid Score: {valid_score:.4f} '
+            f'Train Epoch Time: {train_time:.2f} '
+            f'Valid Epoch Time: {valid_time:.2f}'
+        )
 
-            for epoch in range(args.num_epochs):
-                train_time, train_loss, train_score = train(
-                    embedding_layer,
-                    model,
-                    device,
-                    embedding_optimizer,
-                    model_optimizer,
-                    loss_function,
-                    evaluator,
-                    train_dataloader,
-                    labels,
-                    predict_category,
-                )
-                valid_time, valid_loss, valid_score = validate(
-                    embedding_layer,
-                    model,
-                    loss_function,
-                    evaluator,
-                    hg,
-                    labels,
-                    predict_category,
-                    valid_idx,
-                )
+        if checkpoint.should_stop:
+            print('!! Early Stopping !!')
 
-                checkpoint.create(
-                    sigopt_context,
-                    epoch,
-                    train_time,
-                    valid_time,
-                    train_loss,
-                    valid_loss,
-                    train_score,
-                    valid_score,
-                    {'embedding_layer': embedding_layer, 'model': model},
-                )
+            break
 
-                print(
-                    f'Epoch: {epoch + 1:03} '
-                    f'Train Loss: {train_loss:.2f} '
-                    f'Valid Loss: {valid_loss:.2f} '
-                    f'Train Score: {train_score:.4f} '
-                    f'Valid Score: {valid_score:.4f} '
-                    f'Train Epoch Time: {train_time:.2f} '
-                    f'Valid Epoch Time: {valid_time:.2f}'
-                )
+    if args.test_validation:
+        embedding_layer.load_state_dict(
+            checkpoint.best_epoch_model_parameters['embedding_layer'])
+        model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
 
-                if checkpoint.should_stop:
-                    print('!! Early Stopping !!')
+        test_time, test_loss, test_score = validate(
+            embedding_layer,
+            model,
+            loss_function,
+            evaluator,
+            hg,
+            labels,
+            predict_category,
+            test_idx,
+        )
 
-                    break
+        print(
+            f'Test Loss: {test_loss:.2f} '
+            f'Test Score: {test_score:.4f} '
+            f'Test Epoch Time: {test_time:.2f}'
+        )
 
-            if args.test_validation:
-                embedding_layer.load_state_dict(
-                    checkpoint.best_epoch_model_parameters['embedding_layer'])
-                model.load_state_dict(checkpoint.best_epoch_model_parameters['model'])
+    if sigopt_context is not None:
+        metrics = {
+            'best epoch': checkpoint.best_epoch,
+            'best epoch - train loss': checkpoint.best_epoch_train_loss,
+            'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+            'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+            'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+            'best epoch - training time': checkpoint.best_epoch_training_time,
+            'avg train epoch time': np.mean(checkpoint.train_times),
+            'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'best epoch - test loss': test_loss,
+            'best epoch - test score': test_score,
+            'test epoch time': test_time
+        }
 
-                test_time, test_loss, test_score = validate(
-                    embedding_layer,
-                    model,
-                    loss_function,
-                    evaluator,
-                    hg,
-                    labels,
-                    predict_category,
-                    test_idx,
-                )
-
-                print(
-                    f'Test Loss: {test_loss:.2f} '
-                    f'Test Score: {test_score:.4f} '
-                    f'Test Epoch Time: {test_time:.2f}'
-                )
-
-                metrics = {
-                    'best epoch': checkpoint.best_epoch,
-                    'best epoch - train loss': checkpoint.best_epoch_train_loss,
-                    'best epoch - train score': checkpoint.best_epoch_train_accuracy,
-                    'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
-                    'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
-                    'best epoch - training time': checkpoint.best_epoch_training_time,
-                    'avg train epoch time': np.mean(checkpoint.train_times),
-                    'avg valid epoch time': np.mean(checkpoint.valid_times),
-                    'max batch num nodes': max_batch_num_nodes,
-                    'best epoch - test loss': test_loss,
-                    'best epoch - test score': test_score,
-                    'test epoch time': test_time
-                }
-
-
-                utils.log_metrics_to_sigopt(
-                    sigopt_context,
-                    metrics,
-                )
-        else:
-            print("FAILED - NOT TRAINING")
-            metrics = {
-                'best epoch': 0,
-                'best epoch - train loss': 100,
-                'best epoch - train score': 0,
-                'best epoch - valid loss': 100,
-                'best epoch - valid score': 0,
-                'best epoch - training time': 0,
-                'avg train epoch time': 0,
-                'avg valid epoch time': 0,
-                'max batch num nodes': max_batch_num_nodes,
-            }
-
-            utils.log_metrics_to_sigopt(
-                sigopt_context,
-                metrics,
-            )
+        utils.log_metrics_to_sigopt(
+            sigopt_context,
+            **metrics
+        )
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -360,7 +393,12 @@ if __name__ == '__main__':
             )
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
+
         while not experiment.is_finished():
-            run(args, experiment=experiment)
+            with experiment.create_run() as sigopt_context:
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
     else:
-        run(args, experiment=None)
+        run(args)

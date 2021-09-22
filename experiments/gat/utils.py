@@ -93,7 +93,6 @@ class Callback:
 
     def create(
         self,
-        sigopt_context,
         epoch: int,
         train_time: float,
         valid_time: float,
@@ -102,6 +101,7 @@ class Callback:
         train_accuracy: float,
         valid_accuracy: float,
         model: Union[nn.Module, dict[str, nn.Module]],
+        sigopt_context=None,
     ) -> None:
         self._train_times.append(train_time)
         self._valid_times.append(valid_time)
@@ -110,13 +110,13 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        print("LOGGING CHECKPOINT")
-        sigopt_context.log_checkpoint({
-            'train loss': train_loss,
-            'valid loss': valid_loss,
-            'train accuracy': train_accuracy,
-            'valid accuracy': valid_accuracy,
-        })
+        if sigopt_context is not None:
+            sigopt_context.log_checkpoint({
+                'train loss': train_loss,
+                'valid loss': valid_loss,
+                'train accuracy': train_accuracy,
+                'valid accuracy': valid_accuracy,
+            })
 
         best_epoch = False
 
@@ -180,17 +180,19 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
-    sigopt_context,
-    metrics,
+    sigopt_context: sigopt.run_context,
+    **metrics,
 ) -> None:
-    print("LOGGING METRICS")
-    values = [sigopt_context.log_metric(name=k, value=v) for k, v in metrics.items()]
+    for name, value in metrics.items():
+        sigopt_context.log_metric(name=name, value=value)
+
 
 def download_dataset(dataset: str) -> None:
     if dataset == 'ogbn-products':
         command = 'aws s3 cp s3://ogb-products ./dataset --recursive'
         os.system(command)
         shutil.move('./dataset/ogbn_products', './dataset/ogbn_products_dgl')
+
 
 class OGBDataset:
     def __init__(

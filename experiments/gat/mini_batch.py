@@ -85,7 +85,75 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser, experiment=None) -> None:
+def validate(
+    model: nn.Module,
+    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    evaluator: Evaluator,
+    g: dgl.DGLGraph,
+    mask: torch.Tensor,
+) -> tuple[float]:
+    model.eval()
+
+    start = default_timer()
+
+    inputs = g.ndata['feat']
+    labels = g.ndata['label'][mask]
+
+    with torch.no_grad():
+        logits = model(g, inputs)[mask]
+
+        loss = loss_function(logits, labels)
+        score = utils.get_evaluation_score(evaluator, logits, labels)
+
+    stop = default_timer()
+    time = stop - start
+
+    loss = loss.item()
+
+    return time, loss, score
+
+
+def set_fanouts(
+    num_layers: int,
+    batch_size: int,
+    max_num_batch_nodes: int,
+    fanout_slope: float,
+    max_fanout: int = 40,
+) -> list[int]:
+    result_fanouts = None
+
+    for base_fanout in range(max_fanout + 1):
+        fanouts = []
+
+        for n in range(num_layers):
+            fanout = int((fanout_slope ** n) * base_fanout)
+
+            if fanout < 1:
+                fanout = 1
+
+            if fanout > max_fanout:
+                break
+
+            fanouts.append(fanout)
+
+        if len(fanouts) == num_layers:
+            result = batch_size
+
+            for fanout in reversed(fanouts):
+                result += result * fanout
+
+            if result <= max_num_batch_nodes:
+                result_fanouts = fanouts
+
+    if result_fanouts is None:
+        result_fanouts = [1 for _ in range(num_layers)]
+
+    return result_fanouts
+
+def run(
+    args: argparse.ArgumentParser, 
+    sigopt_context: sigopt.run_context = None,
+) -> None:
     torch.manual_seed(args.seed)
 
     dataset, evaluator, g, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -97,196 +165,188 @@ def run(args: argparse.ArgumentParser, experiment=None) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    with experiment.create_run() as sigopt_context:
+    if sigopt_context is not None:
+        lr = sigopt_context.params.lr
+        node_hidden_feats = sigopt_context.params.node_hidden_feats
+        num_heads = sigopt_context.params.num_heads
+        num_layers = sigopt_context.params.num_layers
+        norm = sigopt_context.params.norm
+        batch_norm = bool(sigopt_context.params.batch_norm)
+        input_dropout = sigopt_context.params.input_dropout
+        attn_dropout = sigopt_context.params.attn_dropout
+        edge_dropout = sigopt_context.params.edge_dropout
+        dropout = sigopt_context.params.dropout
+        negative_slope = sigopt_context.params.negative_slope
+        residual = bool(sigopt_context.params.residual)
+        activation = sigopt_context.params.activation
+        use_attn_dst = bool(sigopt_context.params.use_attn_dst)
+        bias = bool(sigopt_context.params.bias)
+        batch_size = sigopt_context.params.batch_size
+        fanouts = set_fanouts(
+            num_layers,
+            batch_size,
+            sigopt_context.params['max_batch_num_nodes'],
+            sigopt_context.params['fanout_slope'],
+        )
+        sigopt_context.log_metadata(
+            'fanouts', ','.join([str(i) for i in fanouts]))
+        print(f'{sigopt_context.params = }')
+        print(f'{fanouts = }')
+    else:
+        lr = args.lr
+        node_hidden_feats = args.node_hidden_feats
+        num_heads = args.num_heads
+        num_layers = args.num_layers
+        norm = args.norm
+        batch_norm = args.batch_norm
+        input_dropout = args.input_dropout
+        attn_dropout = args.attn_dropout
+        edge_dropout = args.edge_dropout
+        dropout = args.dropout
+        negative_slope = args.negative_slope
+        residual = args.residual
+        activation = args.activation
+        use_attn_dst = args.use_attn_dst
+        bias = args.bias
+        batch_size = args.batch_size
+        fanouts = args.fanouts
 
-        sigopt_context.params.setdefaults(dict(
-            lr = args.lr,
-            node_hidden_feats = args.node_hidden_feats,
-            num_heads = args.num_heads,
-            num_layers = args.num_layers,
-            norm = args.norm,
-            batch_norm = int(args.batch_norm),
-            input_dropout = args.input_dropout,
-            attn_dropout = args.attn_dropout,
-            edge_dropout = args.edge_dropout,
-            dropout = args.dropout,
-            negative_slope = args.negative_slope,
-            residual = int(args.residual),
-            activation = args.activation,
-            use_attn_dst = int(args.use_attn_dst),
-            bias = int(args.bias),
-            batch_size = args.batch_size
-        ))
+    sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
+    train_dataloader = dgl.dataloading.NodeDataLoader(
+        g,
+        train_idx,
+        sampler,
+        batch_size=batch_size,
+        shuffle=True,
+        drop_last=False,
+        num_workers=4,
+    )
 
-        for i in range(int(sigopt_context.params.num_layers)):
-            sigopt_context.params.setdefault(f'layer_{i + 1}_fanout', 10)
-        fanouts = [sigopt_context.params[f'layer_{i + 1}_fanout']
-                   for i in range(int(sigopt_context.params.num_layers))]
+    node_in_feats = g.ndata['feat'].shape[-1]
 
-        max_batch_num_nodes = np.prod(fanouts) * sigopt_context.params.batch_size
+    if args.dataset == 'ogbn-proteins':
         
-        train_flag = True
-
-        if max_batch_num_nodes > g.num_nodes():
-            train_flag = False
-
-        if train_flag:
-
-            sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
-            train_dataloader = dgl.dataloading.NodeDataLoader(
-                g,
-                train_idx,
-                sampler,
-                batch_size=sigopt_context.params.batch_size,
-                shuffle=True,
-                drop_last=False,
-                num_workers=4,
-            )
-
-            node_in_feats = g.ndata['feat'].shape[-1]
-
-            if args.dataset == 'ogbn-proteins':
-                if args.edge_hidden_feats > 0:
-                    sigopt_context.params.setdefaults(
-                        {'edge_hidden_feats': args.edge_hidden_feats})
-                else:
-                    sigopt_context.params.setdefaults({'edge_hidden_feats': 16})
-
-                edge_in_feats = g.edata['feat'].shape[-1]
-                edge_hidden_feats = sigopt_context.params.edge_hidden_feats
-            else:
-                edge_in_feats = 0
-                edge_hidden_feats = 0
-
-            out_feats = dataset.num_classes
-
-            activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
-
-            model = GAT(
-                node_in_feats,
-                edge_in_feats,
-                sigopt_context.paramsnode_hidden_feats,
-                edge_hidden_feats,
-                out_feats,
-                sigopt_context.params.num_heads,
-                sigopt_context.params.num_layers,
-                norm=sigopt_context.params.norm,
-                batch_norm=sigopt_context.params.batch_norm,
-                input_dropout=sigopt_context.params.input_dropout,
-                attn_dropout=sigopt_context.params.attn_dropout,
-                edge_dropout=sigopt_context.params.edge_dropout,
-                dropout=sigopt_context.params.dropout,
-                negative_slope=sigopt_context.params.negative_slope,
-                residual=sigopt_context.params.residual,
-                activation=activations[sigopt_context.params.activation],
-                use_attn_dst=sigopt_context.params.use_attn_dst,
-                bias=sigopt_context.params.bias,
-            ).to(device)
-
-            if args.dataset == 'ogbn-proteins':
-                loss_function = nn.BCEWithLogitsLoss().to(device)
-            else:
-                loss_function = nn.CrossEntropyLoss().to(device)
-
-            optimizer = torch.optim.Adam(model.parameters(), lr=sigopt_context.params.lr)
-
-            checkpoint = utils.Callback(args.early_stopping_patience,
-                                        args.early_stopping_monitor)
-
-            for epoch in range(args.num_epochs):
-                train_time, train_loss, train_score = train(
-                    model, 
-                    device, 
-                    optimizer, 
-                    loss_function, 
-                    evaluator, 
-                    train_dataloader
-                )
-                valid_time, valid_loss, valid_score = validate(
-                    model, 
-                    loss_function, 
-                    evaluator, 
-                    g, 
-                    valid_idx
-                )
-
-                checkpoint.create(
-                    sigopt_context,
-                    epoch,
-                    train_time,
-                    valid_time,
-                    train_loss,
-                    valid_loss,
-                    train_score,
-                    valid_score,
-                    model,
-                )
-
-                print(
-                    f'Epoch: {epoch + 1:03} '
-                    f'Train Loss: {train_loss:.2f} '
-                    f'Valid Loss: {valid_loss:.2f} '
-                    f'Train Score: {train_score:.4f} '
-                    f'Valid Score: {valid_score:.4f} '
-                    f'Train Epoch Time: {train_time:.2f} '
-                    f'Valid Epoch Time: {valid_time:.2f}'
-                )
-
-                if checkpoint.should_stop:
-                    print('!! Early Stopping !!')
-
-                    break
-                
-            if args.test_validation:
-                model.load_state_dict(checkpoint.best_epoch_model_parameters)
-
-                test_time, test_loss, test_score = validate(
-                    model, loss_function, evaluator, g, test_idx)
-
-                print(
-                    f'Test Loss: {test_loss:.2f} '
-                    f'Test Score: {test_score:.4f} % '
-                    f'Test Epoch Time: {test_time:.2f}'
-                )
-
-                metrics = {
-                    'best epoch': checkpoint.best_epoch,
-                    'best epoch - train loss': checkpoint.best_epoch_train_loss,
-                    'best epoch - train score': checkpoint.best_epoch_train_accuracy,
-                    'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
-                    'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
-                    'best epoch - training time': checkpoint.best_epoch_training_time,
-                    'avg train epoch time': np.mean(checkpoint.train_times),
-                    'avg valid epoch time': np.mean(checkpoint.valid_times),
-                    'max batch num nodes': max_batch_num_nodes,
-                    'best epoch - test loss': test_loss,
-                    'best epoch - test score': test_score,
-                    'test epoch time': test_time
-                }
-
-
-                utils.log_metrics_to_sigopt(
-                    sigopt_context,
-                    metrics,
-                )
+        if sigopt_context is not None:
+            edge_hidden_feats = sigopt_context.params.edge_hidden_feats
         else:
-            print("FAILED - NOT TRAINING")
-            metrics = {
-                'best epoch': 0,
-                'best epoch - train loss': 100,
-                'best epoch - train score': 0,
-                'best epoch - valid loss': 100,
-                'best epoch - valid score': 0,
-                'best epoch - training time': 0,
-                'avg train epoch time': 0,
-                'avg valid epoch time': 0,
-                'max batch num nodes': max_batch_num_nodes,
-            }
+            edge_hidden_feats = args.edge_hidden_feats
 
-            utils.log_metrics_to_sigopt(
-                sigopt_context,
-                metrics,
-            )
+        edge_in_feats = g.edata['feat'].shape[-1]
+
+    else:
+        edge_in_feats = 0
+        edge_hidden_feats = 0
+
+    out_feats = dataset.num_classes
+
+    activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
+
+    model = GAT(
+        node_in_feats,
+        edge_in_feats,
+        node_hidden_feats,
+        edge_hidden_feats,
+        out_feats,
+        num_heads,
+        num_layers,
+        norm=norm,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        attn_dropout=attn_dropout,
+        edge_dropout=edge_dropout,
+        dropout=dropout,
+        negative_slope=negative_slope,
+        residual=residual,
+        activation=activations[activation],
+        use_attn_dst=use_attn_dst,
+        bias=bias,
+    ).to(device)
+
+    if args.dataset == 'ogbn-proteins':
+        loss_function = nn.BCEWithLogitsLoss().to(device)
+    else:
+        loss_function = nn.CrossEntropyLoss().to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    checkpoint = utils.Callback(args.early_stopping_patience,
+                                args.early_stopping_monitor)
+
+    for epoch in range(args.num_epochs):
+        train_time, train_loss, train_score = train(
+            model, 
+            device, 
+            optimizer, 
+            loss_function, 
+            evaluator, 
+            train_dataloader
+        )
+        valid_time, valid_loss, valid_score = validate(
+            model, 
+            loss_function, 
+            evaluator, 
+            g, 
+            valid_idx
+        )
+
+        checkpoint.create(
+            epoch,
+            train_time,
+            valid_time,
+            train_loss,
+            valid_loss,
+            train_score,
+            valid_score,
+            model,
+            sigopt_context = sigopt_context
+        )
+
+        print(
+            f'Epoch: {epoch + 1:03} '
+            f'Train Loss: {train_loss:.2f} '
+            f'Valid Loss: {valid_loss:.2f} '
+            f'Train Score: {train_score:.4f} '
+            f'Valid Score: {valid_score:.4f} '
+            f'Train Epoch Time: {train_time:.2f} '
+            f'Valid Epoch Time: {valid_time:.2f}'
+        )
+
+        if checkpoint.should_stop:
+            print('!! Early Stopping !!')
+
+            break
+        
+    if args.test_validation:
+        model.load_state_dict(checkpoint.best_epoch_model_parameters)
+
+        test_time, test_loss, test_score = validate(
+            model, loss_function, evaluator, g, test_idx)
+
+        print(
+            f'Test Loss: {test_loss:.2f} '
+            f'Test Score: {test_score:.4f} % '
+            f'Test Epoch Time: {test_time:.2f}'
+        )
+
+    if sigopt_context is not None:
+        metrics = {
+            'best epoch': checkpoint.best_epoch,
+            'best epoch - train loss': checkpoint.best_epoch_train_loss,
+            'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+            'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+            'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+            'best epoch - training time': checkpoint.best_epoch_training_time,
+            'avg train epoch time': np.mean(checkpoint.train_times),
+            'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'best epoch - test loss': test_loss,
+            'best epoch - test score': test_score,
+            'test epoch time': test_time
+        }
+
+        utils.log_metrics_to_sigopt(
+            sigopt_context,
+            **metrics,
+        )
             
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GAT NS Optimization')
@@ -349,7 +409,12 @@ if __name__ == '__main__':
             )
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
+
         while not experiment.is_finished():
-            run(args, experiment=experiment)
+            with experiment.create_run() as sigopt_context:
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
     else:
-        run(args, experiment=None)
+        run(args)
