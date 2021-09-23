@@ -31,7 +31,7 @@ void cloneRepository(
     sh """docker exec ${containerName} bash -c \
         'git clone ${repositoryURL} \
         && cd full-graph-mini-batch-convergence \
-        && git checkout back_to_new_client'
+        && git checkout uniform_hidden_feats_with_max_batch_nodes_fanout_strat'
     """
 }
 
