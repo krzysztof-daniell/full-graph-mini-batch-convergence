@@ -142,8 +142,7 @@ def run(
     if sigopt_context is not None:
         lr = sigopt_context.params['lr']
         num_layers = sigopt_context.params['num_layers']
-        hidden_feats = [sigopt_context.params['hidden_feats']
-                        for i in range(num_layers - 1)]
+        hidden_feats = sigopt_context.params['hidden_feats']
         aggregator_type = sigopt_context.params['aggregator_type']
         batch_norm = sigopt_context.params['batch_norm']
         activation = sigopt_context.params['activation']
@@ -162,7 +161,7 @@ def run(
 
         print(f'{sigopt_context.params = }')
         print(f'{fanouts = }')
-        
+
     else:
         lr = args.lr
         num_layers = args.num_layers
