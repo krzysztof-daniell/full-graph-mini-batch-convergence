@@ -165,7 +165,8 @@ def run(
     else:
         lr = args.lr
         num_layers = args.num_layers
-        hidden_feats = args.hidden_feats
+        hidden_feats = args.hidden_feats if len(
+            args.hidden_feats) > 1 else args.hidden_feats[0]
         aggregator_type = args.aggregator_type
         batch_norm = args.batch_norm
         activation = args.activation
