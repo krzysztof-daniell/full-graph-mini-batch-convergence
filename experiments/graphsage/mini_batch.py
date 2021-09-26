@@ -341,10 +341,9 @@ if __name__ == '__main__':
 
         while not experiment.is_finished():
             with experiment.create_run() as sigopt_context:
-                run(args, sigopt_context=sigopt_context)
-                # try:
-                #     run(args, sigopt_context=sigopt_context)
-                # except:
-                #     sigopt_context.log_failure()
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
     else:
         run(args)

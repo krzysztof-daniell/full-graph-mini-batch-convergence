@@ -12,6 +12,7 @@ void runContainer(
         --ipc host \
         --cpuset-cpus ${availableNumaCores} \
         --cpuset-mems ${availableNumaMemory} \
+        --memory 120g \
         --volume ${datasetsVolume}:/root/datasets \
         --name ${containerName} \
         ${imageName}
