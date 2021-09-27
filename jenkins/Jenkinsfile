@@ -209,7 +209,7 @@ pipeline {
                     }
                 }
 
-                sh 'echo "Experiment ID: ${env.EXPERIMENT_ID}"'
+                // sh 'echo "Experiment ID: ${env.EXPERIMENT_ID}"'
             }
         }
         stage('Orchestrate Experiment') {
