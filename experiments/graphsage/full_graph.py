@@ -220,7 +220,7 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--num-epochs', default=500, type=int)
+    argparser.add_argument('--num-epochs', default=1000, type=int)
     argparser.add_argument('--lr', default=0.01, type=float)
     argparser.add_argument('--hidden-feats', default=256, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
