@@ -20,9 +20,11 @@ class Callback:
         self,
         patience: int,
         monitor: str,
+        timeout: float = None,
     ) -> None:
         self._patience = patience
         self._monitor = monitor
+        self._timeout = timeout
         self._lookback = 0
         self._best_epoch = None
         self._train_times = []
@@ -89,7 +91,16 @@ class Callback:
 
     @property
     def should_stop(self) -> bool:
-        return self._lookback >= self._patience
+        flag = self._lookback >= self._patience
+
+        return flag
+
+    @property
+    def timeout(self) -> bool:
+        experiment_time = sum(self._train_times) + sum(self._valid_times)
+        flag = experiment_time >= self._timeout
+
+        return flag
 
     def create(
         self,
