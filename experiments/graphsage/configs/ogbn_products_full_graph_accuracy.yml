@@ -24,20 +24,12 @@ parameters:
   - name: activation
     type: categorical
     categorical_values: [leaky_relu, relu]
-  - name: input_dropout
+    - name: input_dropout
     type: double
-    bounds:
-      min: 0.01
-      max: 0.7
+    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
   - name: dropout
     type: double
-    bounds:
-      min: 0.01
-      max: 0.7
-    prior:
-      name: beta
-      shape_a: 2
-      shape_b: 3
+    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
 metrics:
   - name: best epoch 
     strategy: store
