@@ -257,6 +257,8 @@ def run(
         if checkpoint.timeout:
             print('!! Timeout !!')
 
+            break
+
     if args.test_validation:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
