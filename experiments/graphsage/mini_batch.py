@@ -105,7 +105,7 @@ def set_fanouts(
                 fanout = 1
 
             if fanout > max_fanout:
-                break
+                fanout = max_fanout
 
             fanouts.append(fanout)
 
