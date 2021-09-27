@@ -161,7 +161,6 @@ def run(
 
         print(f'{sigopt_context.params = }')
         print(f'{fanouts = }')
-
     else:
         lr = args.lr
         num_layers = args.num_layers

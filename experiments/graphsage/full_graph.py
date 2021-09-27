@@ -14,6 +14,7 @@ from ogb.nodeproppred import Evaluator
 import utils
 from model import GraphSAGE
 
+
 def train(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -75,7 +76,7 @@ def validate(
 
 
 def run(
-    args: argparse.ArgumentParser, 
+    args: argparse.ArgumentParser,
     sigopt_context: sigopt.run_context = None,
 ) -> None:
     torch.manual_seed(args.seed)
@@ -98,7 +99,7 @@ def run(
         activation = sigopt_context.params.activation
         input_dropout = sigopt_context.params.input_dropout
         dropout = sigopt_context.params.dropout
-    else: 
+    else:
         lr = args.lr
         hidden_feats = args.hidden_feats
         num_layers = args.num_layers
@@ -137,20 +138,9 @@ def run(
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_score = train(
-            model, 
-            optimizer,
-            loss_function, 
-            evaluator, 
-            g, 
-            train_idx
-        )
+            model, optimizer, loss_function, evaluator, g, train_idx)
         valid_time, valid_loss, valid_score = validate(
-            model, 
-            loss_function, 
-            evaluator, 
-            g, 
-            valid_idx
-        )
+            model, loss_function, evaluator, g, valid_idx)
 
         checkpoint.create(
             epoch,
@@ -161,7 +151,7 @@ def run(
             train_score,
             valid_score,
             model,
-            sigopt_context=sigopt_context
+            sigopt_context=sigopt_context,
         )
 
         print(
@@ -176,22 +166,21 @@ def run(
 
         if checkpoint.should_stop:
             print('!! Early Stopping !!')
+
             break
 
     if args.test_validation:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
+
         test_time, test_loss, test_score = validate(
-            model, 
-            loss_function, 
-            evaluator, 
-            g, 
-            test_idx
-        )
+            model, loss_function, evaluator, g, test_idx)
+
         print(
             f'Test Loss: {test_loss:.2f} '
             f'Test Score: {test_score * 100:.2f} % '
             f'Test Epoch Time: {test_time:.2f}'
         )
+
     if sigopt_context is not None:
         metrics = {
             'best epoch': checkpoint.best_epoch,
@@ -202,15 +191,17 @@ def run(
             'best epoch - training time': checkpoint.best_epoch_training_time,
             'avg train epoch time': np.mean(checkpoint.train_times),
             'avg valid epoch time': np.mean(checkpoint.valid_times),
-            'best epoch - test loss': test_loss,
-            'best epoch - test score': test_score,
-            'test epoch time': test_time
         }
-        utils.log_metrics_to_sigopt(
-            sigopt_context,
-            metrics,
-        )
+
+        if args.test_validation:
+            metrics['best epoch - test loss'] = test_loss
+            metrics['best epoch - test score'] = test_score
+            metrics['test epoch time'] = test_time
+
+        utils.log_metrics_to_sigopt(sigopt_context, **metrics)
+
         sigopt_context.end()
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE Optimization')
@@ -258,8 +249,10 @@ if __name__ == '__main__':
                 '--sigopt-api-token argument or set '
                 'SIGOPT_API_TOKEN environment variable.'
             )
+
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
+
         while not experiment.is_finished():
             with experiment.create_run() as sigopt_context:
                 try:
