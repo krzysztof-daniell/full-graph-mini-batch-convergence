@@ -110,7 +110,7 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        if sigopt_context is not None and epoch % 2 == 0:
+        if sigopt_context is not None and epoch % 5 == 0:
             sigopt_context.log_checkpoint({
                 'train loss': train_loss,
                 'valid loss': valid_loss,
