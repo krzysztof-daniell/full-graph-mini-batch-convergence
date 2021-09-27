@@ -253,8 +253,7 @@ def run(
             print('!! Early Stopping !!')
 
             break
-
-        if checkpoint.timeout:
+        elif checkpoint.timeout:
             print('!! Timeout !!')
 
             break
