@@ -19,7 +19,11 @@ def run_experiment(args: argparse.ArgumentParser):
         arguments.append('--no-test-validation')
 
     arguments = ' '.join(arguments)
-    env_vars = f'OMP_NUM_THREADS=20 SIGOPT_API_TOKEN={args.sigopt_api_token}'
+
+    env_vars = f'SIGOPT_API_TOKEN={args.sigopt_api_token}'
+
+    if args.training_method == 'mini-batch':
+        env_vars += ' OMP_NUM_THREADS=20'
 
     os.system(f'{env_vars} python {path} {arguments}')
 
