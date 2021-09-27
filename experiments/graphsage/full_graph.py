@@ -99,6 +99,8 @@ def run(
         activation = sigopt_context.params.activation
         input_dropout = sigopt_context.params.input_dropout
         dropout = sigopt_context.params.dropout
+
+        print(f'{sigopt_context.params = }')
     else:
         lr = args.lr
         hidden_feats = args.hidden_feats
