@@ -54,5 +54,9 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
+  - name: experiment time
+    strategy: constraint
+    objective: minimize
+    threshold: 18000
 budget: 100
 parallel_bandwidth: 4

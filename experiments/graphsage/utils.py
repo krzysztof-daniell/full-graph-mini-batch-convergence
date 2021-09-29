@@ -91,16 +91,13 @@ class Callback:
 
     @property
     def should_stop(self) -> bool:
-        flag = self._lookback >= self._patience
-
-        return flag
+        return self._lookback >= self._patience
 
     @property
     def timeout(self) -> bool:
         experiment_time = sum(self._train_times) + sum(self._valid_times)
-        flag = experiment_time >= self._timeout
 
-        return flag
+        return experiment_time >= self._timeout
 
     def create(
         self,

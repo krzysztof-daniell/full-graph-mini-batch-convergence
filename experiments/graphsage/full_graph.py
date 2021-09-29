@@ -135,8 +135,11 @@ def run(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    checkpoint = utils.Callback(args.early_stopping_patience,
-                                args.early_stopping_monitor)
+    checkpoint = utils.Callback(
+        args.early_stopping_patience,
+        args.early_stopping_monitor,
+        timeout=18_000,
+    )
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_score = train(
@@ -170,6 +173,10 @@ def run(
             print('!! Early Stopping !!')
 
             break
+        elif checkpoint.timeout:
+            print('!! Timeout !!')
+
+            break
 
     if args.test_validation:
         model.load_state_dict(checkpoint.best_epoch_model_parameters)
@@ -193,6 +200,7 @@ def run(
             'best epoch - training time': checkpoint.best_epoch_training_time,
             'avg train epoch time': np.mean(checkpoint.train_times),
             'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
         }
 
         if args.test_validation:

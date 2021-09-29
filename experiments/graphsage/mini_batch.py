@@ -280,6 +280,7 @@ def run(
             'best epoch - training time': checkpoint.best_epoch_training_time,
             'avg train epoch time': np.mean(checkpoint.train_times),
             'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
         }
 
         if args.test_validation:
