@@ -87,10 +87,10 @@ def validate(
 
 
 def run(
-    args: argparse.ArgumentParser, 
+    args: argparse.ArgumentParser,
     sigopt_context: sigopt.run_context = None,
 ) -> None:
- 
+
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -162,11 +162,11 @@ def run(
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), 
+        embedding_layer.node_embeddings.parameters()),
         lr=embedding_lr
     )
     model_optimizer = torch.optim.Adam(
-        model.parameters(), 
+        model.parameters(),
         lr=model_lr
     )
 
@@ -208,7 +208,7 @@ def run(
             train_score,
             valid_score,
             {'embedding_layer': embedding_layer, 'model': model},
-            sigopt_context = sigopt_context
+            sigopt_context=sigopt_context,
         )
 
         print(
@@ -248,8 +248,7 @@ def run(
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-    if sigopt_context is not None: 
-        
+    if sigopt_context is not None:
         metrics = {
             'best epoch': checkpoint.best_epoch,
             'best epoch - train loss': checkpoint.best_epoch_train_loss,
@@ -259,15 +258,15 @@ def run(
             'best epoch - training time': checkpoint.best_epoch_training_time,
             'avg train epoch time': np.mean(checkpoint.train_times),
             'avg valid epoch time': np.mean(checkpoint.valid_times),
-            'best epoch - test loss': test_loss,
-            'best epoch - test score': test_score,
-            'test epoch time': test_time
+            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
         }
 
-        utils.log_metrics_to_sigopt(
-            sigopt_context,
-            metrics,
-        )
+        if args.test_validation:
+            metrics['best epoch - test loss'] = test_loss
+            metrics['best epoch - test score'] = test_score
+            metrics['test epoch time'] = test_time
+
+        utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
 
 
 if __name__ == '__main__':

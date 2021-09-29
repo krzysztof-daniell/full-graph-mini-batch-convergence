@@ -14,6 +14,7 @@ from ogb.nodeproppred import Evaluator
 import utils
 from model import EntityClassify, RelGraphEmbedding
 
+
 def train(
     embedding_layer: nn.Module,
     model: nn.Module,
@@ -95,43 +96,6 @@ def validate(
 
     return time, loss, score
 
-def set_fanouts(
-    num_layers: int,
-    batch_size: int,
-    max_num_batch_nodes: int,
-    fanout_slope: float,
-    max_fanout: int = 40,
-) -> list[int]:
-    result_fanouts = None
-
-    for base_fanout in range(max_fanout + 1):
-        fanouts = []
-
-        for n in range(num_layers):
-            fanout = int((fanout_slope ** n) * base_fanout)
-
-            if fanout < 1:
-                fanout = 1
-
-            if fanout > max_fanout:
-                break
-
-            fanouts.append(fanout)
-
-        if len(fanouts) == num_layers:
-            result = batch_size
-
-            for fanout in reversed(fanouts):
-                result += result * fanout
-
-            if result <= max_num_batch_nodes:
-                result_fanouts = fanouts
-
-    if result_fanouts is None:
-        result_fanouts = [1 for _ in range(num_layers)]
-
-    return result_fanouts
-
 
 def run(
     args: argparse.ArgumentParser,
@@ -148,9 +112,7 @@ def run(
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    
     if sigopt_context is not None:
-
         embedding_lr = sigopt_context.params.embedding_lr
         model_lr = sigopt_context.params.model_lr
         hidden_feats = sigopt_context.params.hidden_feats
@@ -163,7 +125,7 @@ def run(
         dropout = sigopt_context.params.dropout
         self_loop = bool(sigopt_context.params.self_loop)
         batch_size = sigopt_context.params.batch_size
-        fanouts = set_fanouts(
+        fanouts = utils.set_fanouts(
             num_layers,
             batch_size,
             sigopt_context.params['max_batch_num_nodes'],
@@ -172,14 +134,14 @@ def run(
 
         sigopt_context.log_metadata(
             'fanouts', ','.join([str(i) for i in fanouts]))
-        
+
         print(f'{sigopt_context.params = }')
         print(f'{fanouts = }')
     else:
-        #fanouts = [int(i) for i in args.fanouts.split(',')]
         embedding_lr = args.embedding_lr
         model_lr = args.model_lr
-        hidden_feats = args.hidden_feats
+        hidden_feats = args.hidden_feats if len(
+            args.hidden_feats) > 1 else args.hidden_feats[0]
         num_bases = args.num_bases
         num_layers = args.num_layers
         norm = args.norm
@@ -190,7 +152,7 @@ def run(
         self_loop = args.self_loop
         batch_size = args.batch_size
         fanouts = args.fanouts
-      
+
     sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
         hg,
@@ -237,11 +199,11 @@ def run(
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), 
+        embedding_layer.node_embeddings.parameters()),
         lr=embedding_lr
     )
     model_optimizer = torch.optim.Adam(
-        model.parameters(), 
+        model.parameters(),
         lr=model_lr
     )
 
@@ -283,7 +245,7 @@ def run(
             train_score,
             valid_score,
             {'embedding_layer': embedding_layer, 'model': model},
-            sigopt_context=sigopt_context
+            sigopt_context=sigopt_context,
         )
 
         print(
@@ -333,15 +295,16 @@ def run(
             'best epoch - training time': checkpoint.best_epoch_training_time,
             'avg train epoch time': np.mean(checkpoint.train_times),
             'avg valid epoch time': np.mean(checkpoint.valid_times),
-            'best epoch - test loss': test_loss,
-            'best epoch - test score': test_score,
-            'test epoch time': test_time
+            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
         }
 
-        utils.log_metrics_to_sigopt(
-            sigopt_context,
-            **metrics
-        )
+        if args.test_validation:
+            metrics['best epoch - test loss'] = test_loss
+            metrics['best epoch - test score'] = test_score
+            metrics['test epoch time'] = test_time
+
+        utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -357,7 +320,7 @@ if __name__ == '__main__':
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
-    argparser.add_argument('--hidden-feats', default=64, type=int)
+    argparser.add_argument('--hidden-feats', default=64, nargs='+', type=int)
     argparser.add_argument('--num-bases', default=2, type=int)
     argparser.add_argument('--num-layers', default=2, type=int)
     argparser.add_argument('--norm', default='right',
