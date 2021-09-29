@@ -86,42 +86,7 @@ def validate(
     return time, loss, score
 
 
-def set_fanouts(
-    num_layers: int,
-    batch_size: int,
-    max_num_batch_nodes: int,
-    fanout_slope: float,
-    max_fanout: int = 40,
-) -> list[int]:
-    result_fanouts = None
 
-    for base_fanout in range(max_fanout + 1):
-        fanouts = []
-
-        for n in range(num_layers):
-            fanout = int((fanout_slope ** n) * base_fanout)
-
-            if fanout < 1:
-                fanout = 1
-
-            if fanout > max_fanout:
-                fanout = max_fanout
-
-            fanouts.append(fanout)
-
-        if len(fanouts) == num_layers:
-            result = batch_size
-
-            for fanout in reversed(fanouts):
-                result += result * fanout
-
-            if result <= max_num_batch_nodes:
-                result_fanouts = fanouts
-
-    if result_fanouts is None:
-        result_fanouts = [1 for _ in range(num_layers)]
-
-    return result_fanouts
 
 
 def run(
@@ -149,7 +114,7 @@ def run(
         input_dropout = sigopt_context.params['input_dropout']
         dropout = sigopt_context.params['dropout']
         batch_size = sigopt_context.params['batch_size']
-        fanouts = set_fanouts(
+        fanouts = utils.set_fanouts(
             num_layers,
             batch_size,
             sigopt_context.params['max_batch_num_nodes'],
