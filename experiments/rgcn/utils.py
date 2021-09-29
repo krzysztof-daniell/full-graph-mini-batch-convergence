@@ -20,9 +20,11 @@ class Callback:
         self,
         patience: int,
         monitor: str,
+        timeout: float = None,
     ) -> None:
         self._patience = patience
         self._monitor = monitor
+        self._timeout = timeout
         self._lookback = 0
         self._best_epoch = None
         self._train_times = []
@@ -91,6 +93,12 @@ class Callback:
     def should_stop(self) -> bool:
         return self._lookback >= self._patience
 
+    @property
+    def timeout(self) -> bool:
+        experiment_time = sum(self._train_times) + sum(self._valid_times)
+
+        return experiment_time >= self._timeout
+
     def create(
         self,
         epoch: int,
@@ -110,7 +118,7 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        if sigopt_context is not None:
+        if sigopt_context is not None and epoch % 5 == 0:
             sigopt_context.log_checkpoint({
                 'train loss': train_loss,
                 'valid loss': valid_loss,
@@ -181,10 +189,20 @@ def get_metrics_plot(
 
 def log_metrics_to_sigopt(
     sigopt_context: sigopt.run_context,
+    checkpoint: Callback,
     **metrics,
 ) -> None:
     for name, value in metrics.items():
         sigopt_context.log_metric(name=name, value=value)
+
+    metrics_plot = get_metrics_plot(
+        checkpoint.train_accuracies,
+        checkpoint.valid_accuracies,
+        checkpoint.train_losses,
+        checkpoint.valid_losses,
+    )
+
+    sigopt_context.log_image(metrics_plot, name='convergence plot')
 
 
 def download_dataset(dataset: str) -> None:
@@ -399,8 +417,39 @@ def get_evaluation_score(
     return score
 
 
-def is_experiment_finished(experiment) -> bool:
-    observation_count = experiment.fetch().progress.observation_count
-    observation_budget = experiment.fetch().observation_budget
+def set_fanouts(
+    num_layers: int,
+    batch_size: int,
+    max_num_batch_nodes: int,
+    fanout_slope: float,
+    max_fanout: int = 40,
+) -> list[int]:
+    result_fanouts = None
 
-    return observation_count <= observation_budget
+    for base_fanout in range(max_fanout + 1):
+        fanouts = []
+
+        for n in range(num_layers):
+            fanout = int((fanout_slope ** n) * base_fanout)
+
+            if fanout < 1:
+                fanout = 1
+
+            if fanout > max_fanout:
+                fanout = max_fanout
+
+            fanouts.append(fanout)
+
+        if len(fanouts) == num_layers:
+            result = batch_size
+
+            for fanout in reversed(fanouts):
+                result += result * fanout
+
+            if result <= max_num_batch_nodes:
+                result_fanouts = fanouts
+
+    if result_fanouts is None:
+        result_fanouts = [1 for _ in range(num_layers)]
+
+    return result_fanouts
