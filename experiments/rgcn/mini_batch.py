@@ -209,7 +209,8 @@ def run(
 
     checkpoint = utils.Callback(
         args.early_stopping_patience,
-        args.early_stopping_monitor
+        args.early_stopping_monitor,
+        timeout=18_000,
     )
 
     for epoch in range(args.num_epochs):
@@ -260,6 +261,10 @@ def run(
 
         if checkpoint.should_stop:
             print('!! Early Stopping !!')
+
+            break
+        elif checkpoint.timeout:
+            print('!! Timeout !!')
 
             break
 
