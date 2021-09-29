@@ -412,3 +412,41 @@ def is_experiment_finished(experiment) -> bool:
     observation_budget = experiment.fetch().observation_budget
 
     return observation_count <= observation_budget
+
+
+def set_fanouts(
+    num_layers: int,
+    batch_size: int,
+    max_num_batch_nodes: int,
+    fanout_slope: float,
+    max_fanout: int = 40,
+) -> list[int]:
+    result_fanouts = None
+
+    for base_fanout in range(max_fanout + 1):
+        fanouts = []
+
+        for n in range(num_layers):
+            fanout = int((fanout_slope ** n) * base_fanout)
+
+            if fanout < 1:
+                fanout = 1
+
+            if fanout > max_fanout:
+                fanout = max_fanout
+
+            fanouts.append(fanout)
+
+        if len(fanouts) == num_layers:
+            result = batch_size
+
+            for fanout in reversed(fanouts):
+                result += result * fanout
+
+            if result <= max_num_batch_nodes:
+                result_fanouts = fanouts
+
+    if result_fanouts is None:
+        result_fanouts = [1 for _ in range(num_layers)]
+
+    return result_fanouts
