@@ -4,8 +4,8 @@ from timeit import default_timer
 from typing import Callable, Union
 
 import dgl
-import sigopt
 import numpy as np
+import sigopt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
