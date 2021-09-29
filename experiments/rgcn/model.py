@@ -207,7 +207,7 @@ class EntityClassify(nn.Module):
 
         self._layers.append(RelGraphConvLayer(
             in_feats,
-            hidden_feats[0],
+            self._hidden_feats[0],
             self._rel_names,
             self._num_bases,
             norm=norm,
@@ -225,7 +225,7 @@ class EntityClassify(nn.Module):
             ))
 
         self._layers.append(RelGraphConvLayer(
-            hidden_feats[-1],
+            self._hidden_feats[-1],
             out_feats,
             self._rel_names,
             self._num_bases,
