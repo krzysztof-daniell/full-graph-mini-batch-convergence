@@ -25,7 +25,7 @@ parameters:
     type: int
     bounds:
       min: 2
-      max: 8
+      max: 4
   - name: norm
     type: categorical
     categorical_values: [both, none, right]
@@ -41,9 +41,12 @@ parameters:
   - name: dropout
     type: double
     grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+  - name: self_loop
+    type: int
+    grid: [0, 1]
   - name: batch_size
     type: int
-    grid: [256, 512, 768, 1024, 1536, 2048]
+    grid: [256, 512, 1024, 2048]
   - name: max_batch_num_nodes
     type: int
     grid: [100000, 200000, 400000, 800000, 1600000, 3200000]
