@@ -5,13 +5,13 @@ parameters:
     type: double
     transformation: log
     bounds:
-      min: 0.00001
+      min: 0.0001
       max: 0.01
   - name: embedding_lr
     type: double
     transformation: log
     bounds:
-      min: 0.00001
+      min: 0.0001
       max: 0.01
   - name: num_layers
     type: int
@@ -20,12 +20,12 @@ parameters:
       max: 5
   - name: hidden_feats
     type: int
-    grid: [16, 32, 64, 128, 256, 512]
+    grid: [16, 32, 64, 128, 192, 256, 320, 384, 448, 512]
   - name: num_bases
     type: int
     bounds:
       min: 2
-      max: 4
+      max: 8
   - name: norm
     type: categorical
     categorical_values: [both, none, right]
@@ -37,21 +37,13 @@ parameters:
     categorical_values: [leaky_relu, relu]
   - name: input_dropout
     type: double
-    bounds: 
-      min: 0.0
-      max: 0.3
+    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
   - name: dropout
     type: double
-    bounds:
-      min: 0.01
-      max: 0.7
-    prior:
-      name: beta
-      shape_a: 2
-      shape_b: 3
+    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
   - name: batch_size
     type: int
-    grid: [500, 750, 1000, 2000, 4000, 8000, 16000]
+    grid: [256, 512, 768, 1024, 1536, 2048]
   - name: max_batch_num_nodes
     type: int
     grid: [100000, 200000, 400000, 800000, 1600000, 3200000]
@@ -83,5 +75,9 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
+  - name: experiment time
+    strategy: constraint
+    objective: minimize
+    threshold: 18000
 budget: 100
 parallel_bandwidth: 4

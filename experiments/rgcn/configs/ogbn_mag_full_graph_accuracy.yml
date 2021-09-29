@@ -1,18 +1,17 @@
-# ogbn_mag_full_graph_accuracy.yml
 name: rgcn - ogbn-mag - full-graph - accuracy
 parameters: 
   - name: model_lr
     type: double
     transformation: log
     bounds:
-      min: 0.0001
-      max: 0.05
+      min: 0.001
+      max: 0.1
   - name: embedding_lr
     type: double
     transformation: log
     bounds:
-      min: 0.0001
-      max: 0.05
+      min: 0.001
+      max: 0.1
   - name: num_layers
     type: int
     bounds:
@@ -20,12 +19,12 @@ parameters:
       max: 5
   - name: hidden_feats
     type: int
-    grid: [16, 32, 64, 128, 256, 512]
+    grid: [16, 32, 64, 128, 192, 256, 320, 384, 448, 512]
   - name: num_bases
     type: int
     bounds:
       min: 2
-      max: 4
+      max: 8
   - name: norm
     type: categorical
     categorical_values: [both, none, right]
@@ -37,18 +36,10 @@ parameters:
     categorical_values: [leaky_relu, relu]
   - name: input_dropout
     type: double
-    bounds: 
-      min: 0.0
-      max: 0.3
+    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
   - name: dropout
     type: double
-    bounds:
-      min: 0.01
-      max: 0.7
-    prior:
-      name: beta
-      shape_a: 2
-      shape_b: 3
+    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
   - name: self_loop
     type: int
     grid: [0, 1]
@@ -77,5 +68,9 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
+  - name: experiment time
+    strategy: constraint
+    objective: minimize
+    threshold: 18000
 budget: 100
 parallel_bandwidth: 4
