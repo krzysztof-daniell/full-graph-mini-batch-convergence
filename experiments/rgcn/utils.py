@@ -90,14 +90,24 @@ class Callback:
         return self._model_parameters
 
     @property
+    def avg_train_time(self) -> float:
+        return np.mean(self._train_times)
+
+    @property
+    def avg_valid_time(self) -> float:
+        return np.mean(self._valid_times)
+
+    @property
+    def experiment_time(self) -> float:
+        return sum(self._train_times + self._valid_times)
+
+    @property
     def should_stop(self) -> bool:
         return self._lookback >= self._patience
 
     @property
     def timeout(self) -> bool:
-        experiment_time = sum(self._train_times) + sum(self._valid_times)
-
-        return experiment_time >= self._timeout
+        return self.experiment_time >= self._timeout
 
     def create(
         self,

@@ -4,7 +4,6 @@ from timeit import default_timer
 from typing import Callable, Union
 
 import dgl
-import numpy as np
 import sigopt
 import torch
 import torch.nn as nn
@@ -298,9 +297,9 @@ def run(
             'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
             'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
             'best epoch - training time': checkpoint.best_epoch_training_time,
-            'avg train epoch time': np.mean(checkpoint.train_times),
-            'avg valid epoch time': np.mean(checkpoint.valid_times),
-            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
+            'avg train epoch time': checkpoint.avg_train_time,
+            'avg valid epoch time': checkpoint.avg_valid_time,
+            'experiment time': checkpoint.experiment_time,
         }
 
         if args.test_validation:
@@ -360,6 +359,7 @@ if __name__ == '__main__':
                 '--sigopt-api-token argument or set '
                 'SIGOPT_API_TOKEN environment variable.'
             )
+
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
 
