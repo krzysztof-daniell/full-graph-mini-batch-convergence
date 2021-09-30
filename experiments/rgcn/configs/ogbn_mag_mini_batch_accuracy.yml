@@ -5,14 +5,14 @@ parameters:
     type: double
     transformation: log
     bounds:
-      min: 0.0001
-      max: 0.01
+      min: 0.001
+      max: 0.1
   - name: embedding_lr
     type: double
     transformation: log
     bounds:
-      min: 0.0001
-      max: 0.01
+      min: 0.001
+      max: 0.1
   - name: num_layers
     type: int
     bounds:
@@ -60,13 +60,13 @@ metrics:
   - name: best epoch - train loss
     strategy: store
     objective: minimize
-  - name: best epoch - train accuracy
+  - name: best epoch - train score
     strategy: store
     objective: maximize
   - name: best epoch - valid loss
     strategy: optimize
     objective: minimize
-  - name: best epoch - valid accuracy
+  - name: best epoch - valid score
     strategy: store
     objective: maximize
   - name: best epoch - training time
