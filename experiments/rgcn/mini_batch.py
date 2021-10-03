@@ -210,6 +210,7 @@ def run(
         args.early_stopping_patience,
         args.early_stopping_monitor,
         timeout=18_000,
+        log_checkpoint_every=args.num_epochs // 200,
     )
 
     for epoch in range(args.num_epochs):
@@ -321,7 +322,7 @@ if __name__ == '__main__':
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--project-id', default="rgcn", type=str)
-    argparser.add_argument('--num-epochs', default=500, type=int)
+    argparser.add_argument('--num-epochs', default=200, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
     argparser.add_argument('--hidden-feats', default=64, nargs='+', type=int)

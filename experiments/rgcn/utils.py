@@ -21,10 +21,12 @@ class Callback:
         patience: int,
         monitor: str,
         timeout: float = None,
+        log_checkpoint_every: int = 5,
     ) -> None:
         self._patience = patience
         self._monitor = monitor
         self._timeout = timeout
+        self._log_checkpoint_every = log_checkpoint_every
         self._lookback = 0
         self._best_epoch = None
         self._train_times = []
@@ -128,7 +130,7 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        if sigopt_context is not None and epoch % 5 == 0:
+        if sigopt_context is not None and epoch % self._log_checkpoint_every == 0:
             sigopt_context.log_checkpoint({
                 'train loss': train_loss,
                 'valid loss': valid_loss,
