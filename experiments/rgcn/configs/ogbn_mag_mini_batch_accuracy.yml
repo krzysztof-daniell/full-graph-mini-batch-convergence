@@ -1,13 +1,7 @@
 # ogbn_mag_mini_batch_accuracy.yml
 name: rgcn - ogbn-mag - mini-batch - accuracy
 parameters: 
-  - name: model_lr
-    type: double
-    transformation: log
-    bounds:
-      min: 0.001
-      max: 0.1
-  - name: embedding_lr
+  - name: lr
     type: double
     transformation: log
     bounds:
@@ -17,18 +11,15 @@ parameters:
     type: int
     bounds:
       min: 2
-      max: 3
+      max: 4
   - name: hidden_feats
     type: int
-    grid: [16, 32, 64, 128, 192, 256, 320, 384, 448, 512]
+    grid: [64, 128, 192, 256, 320, 384, 448, 512, 576, 640, 704, 768]
   - name: num_bases
     type: int
     bounds:
       min: 2
       max: 4
-  - name: norm
-    type: categorical
-    categorical_values: [both, none, right]
   - name: batch_norm
     type: int
     grid: [0, 1]
@@ -37,16 +28,13 @@ parameters:
     categorical_values: [leaky_relu, relu]
   - name: input_dropout
     type: double
-    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+    grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
   - name: dropout
     type: double
-    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
-  - name: self_loop
-    type: int
-    grid: [0, 1]
+    grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
   - name: batch_size
     type: int
-    grid: [512, 1024, 2048]
+    grid: [512, 1024, 2048, 4096]
   - name: max_batch_num_nodes
     type: int
     grid: [100000, 200000, 400000, 800000, 1600000]

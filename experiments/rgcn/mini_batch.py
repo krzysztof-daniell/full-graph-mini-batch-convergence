@@ -112,17 +112,17 @@ def run(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        embedding_lr = sigopt_context.params.embedding_lr
-        model_lr = sigopt_context.params.model_lr
+        embedding_lr = sigopt_context.params.lr
+        model_lr = sigopt_context.params.lr
         hidden_feats = sigopt_context.params.hidden_feats
         num_bases = sigopt_context.params.num_bases
         num_layers = sigopt_context.params.num_layers
-        norm = sigopt_context.params.norm
+        norm = 'right'
         batch_norm = bool(sigopt_context.params.batch_norm)
         activation = sigopt_context.params.activation
         input_dropout = sigopt_context.params.input_dropout
         dropout = sigopt_context.params.dropout
-        self_loop = bool(sigopt_context.params.self_loop)
+        self_loop = True
         batch_size = sigopt_context.params.batch_size
         fanouts = utils.set_fanouts(
             num_layers,
