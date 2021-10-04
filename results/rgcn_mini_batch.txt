@@ -1,0 +1,5 @@
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.0062444227824387565 --model-lr 0.0062444227824387565 --hidden-feats 640 --num-bases 4 --num-layers 2 --norm right --no-batch-norm --input-dropout 0.3 --dropout 0.25 --activation relu --self-loop --batch-size 1024 --fanouts 37 40 --test-validation
+Epoch: 001 Train Loss: 2.28 Valid Loss: 1.93 Train Score: 0.4128 Valid Score: 0.4741 Train Epoch Time: 344.51 Valid Epoch Time: 10.40
+Epoch: 002 Train Loss: 1.62 Valid Loss: 1.82 Train Score: 0.5515 Valid Score: 0.5018 Train Epoch Time: 347.93 Valid Epoch Time: 10.64
+Epoch: 003 Train Loss: 1.20 Valid Loss: 1.85 Train Score: 0.6560 Valid Score: 0.5049 Train Epoch Time: 355.13 Valid Epoch Time: 10.73
+Test Loss: 1.91 Test Score: 0.4752 Test Epoch Time: 10.72
