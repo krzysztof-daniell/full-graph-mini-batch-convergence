@@ -21,10 +21,12 @@ class Callback:
         patience: int,
         monitor: str,
         timeout: float = None,
+        log_checkpoint_every: int = 5,
     ) -> None:
         self._patience = patience
         self._monitor = monitor
         self._timeout = timeout
+        self._log_checkpoint_every = log_checkpoint_every
         self._lookback = 0
         self._best_epoch = None
         self._train_times = []
@@ -90,14 +92,24 @@ class Callback:
         return self._model_parameters
 
     @property
+    def avg_train_time(self) -> float:
+        return np.mean(self._train_times)
+
+    @property
+    def avg_valid_time(self) -> float:
+        return np.mean(self._valid_times)
+
+    @property
+    def experiment_time(self) -> float:
+        return sum(self._train_times + self._valid_times)
+
+    @property
     def should_stop(self) -> bool:
         return self._lookback >= self._patience
 
     @property
     def timeout(self) -> bool:
-        experiment_time = sum(self._train_times) + sum(self._valid_times)
-
-        return experiment_time >= self._timeout
+        return self.experiment_time >= self._timeout
 
     def create(
         self,
@@ -118,7 +130,7 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        if sigopt_context is not None and epoch % 5 == 0:
+        if sigopt_context is not None and epoch % self._log_checkpoint_every == 0:
             sigopt_context.log_checkpoint({
                 'train loss': train_loss,
                 'valid loss': valid_loss,
@@ -189,10 +201,20 @@ def get_metrics_plot(
 
 def log_metrics_to_sigopt(
     sigopt_context: sigopt.run_context,
+    checkpoint: Callback,
     **metrics,
 ) -> None:
     for name, value in metrics.items():
         sigopt_context.log_metric(name=name, value=value)
+
+    metrics_plot = get_metrics_plot(
+        checkpoint.train_accuracies,
+        checkpoint.valid_accuracies,
+        checkpoint.train_losses,
+        checkpoint.valid_losses,
+    )
+
+    sigopt_context.log_image(metrics_plot, name='convergence plot')
 
 
 def download_dataset(dataset: str) -> None:
@@ -405,13 +427,6 @@ def get_evaluation_score(
     }).popitem()
 
     return score
-
-
-def is_experiment_finished(experiment) -> bool:
-    observation_count = experiment.fetch().progress.observation_count
-    observation_budget = experiment.fetch().observation_budget
-
-    return observation_count <= observation_budget
 
 
 def set_fanouts(

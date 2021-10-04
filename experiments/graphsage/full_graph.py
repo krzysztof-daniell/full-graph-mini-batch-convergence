@@ -4,8 +4,8 @@ from timeit import default_timer
 from typing import Callable
 
 import dgl
-import sigopt
 import numpy as np
+import sigopt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -139,6 +139,7 @@ def run(
         args.early_stopping_patience,
         args.early_stopping_monitor,
         timeout=18_000,
+        log_checkpoint_every=np.ceil(args.num_epochs / 200),
     )
 
     for epoch in range(args.num_epochs):
@@ -198,9 +199,9 @@ def run(
             'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
             'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
             'best epoch - training time': checkpoint.best_epoch_training_time,
-            'avg train epoch time': np.mean(checkpoint.train_times),
-            'avg valid epoch time': np.mean(checkpoint.valid_times),
-            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
+            'avg train epoch time': checkpoint.avg_train_time,
+            'avg valid epoch time': checkpoint.avg_valid_time,
+            'experiment time': checkpoint.experiment_time,
         }
 
         if args.test_validation:
@@ -209,8 +210,6 @@ def run(
             metrics['test epoch time'] = test_time
 
         utils.log_metrics_to_sigopt(sigopt_context, **metrics)
-
-        sigopt_context.end()
 
 
 if __name__ == '__main__':

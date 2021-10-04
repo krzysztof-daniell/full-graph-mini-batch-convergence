@@ -4,6 +4,7 @@ from timeit import default_timer
 from typing import Callable, Union
 
 import dgl
+import numpy as np
 import sigopt
 import torch
 import torch.nn as nn
@@ -180,7 +181,6 @@ def run(
         num_nodes,
         node_feats,
     )
-
     model = EntityClassify(
         hg,
         in_feats,
@@ -198,19 +198,14 @@ def run(
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()),
-        lr=embedding_lr
-    )
-    model_optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=model_lr
-    )
+        embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
+    model_optimizer = torch.optim.Adam(model.parameters(), lr=model_lr)
 
     checkpoint = utils.Callback(
         args.early_stopping_patience,
         args.early_stopping_monitor,
         timeout=18_000,
-        log_checkpoint_every=args.num_epochs // 200,
+        log_checkpoint_every=np.ceil(args.num_epochs / 200),
     )
 
     for epoch in range(args.num_epochs):
