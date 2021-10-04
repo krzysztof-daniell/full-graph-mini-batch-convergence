@@ -305,6 +305,16 @@ def run(
 
         utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
 
+    if args.save_checkpoints_to_csv:
+        if sigopt_context is not None:
+            path = f'{args.checkpoints_path}_{sigopt_context.id}.csv'
+        elif args.checkpoints_path is None:
+            path = f'mini_batch_{args.dataset.replace("-", "_")}.csv'
+        else:
+            path = args.checkpoints_path
+
+        utils.save_checkpoints_to_csv(checkpoint, path)
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -320,7 +330,7 @@ if __name__ == '__main__':
     argparser.add_argument('--num-epochs', default=200, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
-    argparser.add_argument('--hidden-feats', default=64, nargs='+', type=int)
+    argparser.add_argument('--hidden-feats', default=[64], nargs='+', type=int)
     argparser.add_argument('--num-bases', default=2, type=int)
     argparser.add_argument('--num-layers', default=2, type=int)
     argparser.add_argument('--norm', default='right',
@@ -334,7 +344,7 @@ if __name__ == '__main__':
     argparser.add_argument('--self-loop', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--batch-size', default=1024, type=int)
-    argparser.add_argument('--fanouts', default=[5, 10, 15],
+    argparser.add_argument('--fanouts', default=[25, 20],
                            nargs='+', type=str)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
@@ -342,6 +352,9 @@ if __name__ == '__main__':
     argparser.add_argument('--test-validation', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--seed', default=13, type=int)
+    argparser.add_argument('--save-checkpoints-to-csv', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--checkpoints-path', default=None, type=str)
 
     args = argparser.parse_args()
 

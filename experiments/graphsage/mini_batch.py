@@ -253,6 +253,16 @@ def run(
 
         utils.log_metrics_to_sigopt(sigopt_context, **metrics)
 
+    if args.save_checkpoints_to_csv:
+        if sigopt_context is not None:
+            path = f'{args.checkpoints_path}_{sigopt_context.id}.csv'
+        elif args.checkpoints_path is None:
+            path = f'mini_batch_{args.dataset.replace("-", "_")}.csv'
+        else:
+            path = args.checkpoints_path
+
+        utils.save_checkpoints_to_csv(checkpoint, path)
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -270,7 +280,8 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--lr', default=0.003, type=float)
-    argparser.add_argument('--hidden-feats', default=256, nargs='+', type=int)
+    argparser.add_argument('--hidden-feats', default=[256],
+                           nargs='+', type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--aggregator-type', default='mean',
                            type=str, choices=['gcn', 'mean'])
@@ -289,6 +300,11 @@ if __name__ == '__main__':
                            default='loss', type=str)
     argparser.add_argument('--test-validation', default=True,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--save-checkpoints-to-csv', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--checkpoints-path',
+                           default='checkpoints', type=str)
+
     argparser.add_argument('--seed', default=13, type=int)
 
     args = argparser.parse_args()

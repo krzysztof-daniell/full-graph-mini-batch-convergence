@@ -3,7 +3,8 @@ void runContainer(
     String imageName,
     String availableNumaCores,
     String availableNumaMemory,
-    String datasetsVolume
+    String datasetsVolume,
+    String logsVolume
 ) {
     sh """docker run \
         -d \
@@ -14,6 +15,7 @@ void runContainer(
         --cpuset-mems ${availableNumaMemory} \
         --memory 120g \
         --volume ${datasetsVolume}:/root/datasets \
+        --volume ${logsVolume}:/root/logs \
         --name ${containerName} \
         ${imageName}
     """
@@ -81,7 +83,8 @@ void runExperiment(
             --model ${model} \
             --dataset ${dataset} \
             --training-method ${trainingMethod} \
-            --optimization-target ${optimizationTarget}'
+            --optimization-target ${optimizationTarget} \
+            --checkpoints-path /root/logs/${model}_${dataset}_${trainingMethod}_${optimizationTarget}'
     """
 }
 
@@ -92,6 +95,7 @@ pipeline {
 
         IMAGE_NAME = 'dgl-sigopt'
         DATASET_VOLUME = '/home/jenkins/volumes/datasets'
+        LOGS_VOLUME = '/home/jenkins/volumes/logs/sigopt'
         EXPERIMENT_WORK_DIR = '/root/full-graph-mini-batch-convergence/experiments'
 
         NODE_1_CORES = '0-23'
@@ -137,14 +141,16 @@ pipeline {
                             env.IMAGE_NAME,
                             env.NODE_1_CORES,
                             env.NODE_1_MEMORY,
-                            env.DATASET_VOLUME
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
                         )
                         runContainer(
                             'dgl-sigopt-node-2', 
                             env.IMAGE_NAME,
                             env.NODE_2_CORES,
                             env.NODE_2_MEMORY,
-                            env.DATASET_VOLUME
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
                         )
                     }
                 }

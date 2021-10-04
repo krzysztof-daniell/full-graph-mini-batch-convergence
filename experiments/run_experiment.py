@@ -18,6 +18,9 @@ def run_experiment(args: argparse.ArgumentParser):
     elif args.optimization_target == 'accuracy':
         arguments.append('--no-test-validation')
 
+    if args.checkpoints_path is not None:
+        arguments.append(f'--checkpoints-path {args.checkpoints_path}')
+
     arguments = ' '.join(arguments)
 
     env_vars = f'SIGOPT_API_TOKEN={args.sigopt_api_token}'
@@ -42,6 +45,7 @@ if __name__ == '__main__':
                            choices=['mini-batch', 'full-graph'])
     argparser.add_argument('--optimization-target', default=None, type=str,
                            choices=['accuracy', 'speed'])
+    argparser.add_argument('--checkpoints-path', default=None, type=str)
 
     args = argparser.parse_args()
 

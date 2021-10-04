@@ -117,7 +117,8 @@ def run(
     else:
         embedding_lr = args.embedding_lr
         model_lr = args.model_lr
-        hidden_feats = args.hidden_feats
+        hidden_feats = args.hidden_feats if len(
+            args.hidden_feats) > 1 else args.hidden_feats[0]
         num_bases = args.num_bases
         num_layers = args.num_layers
         norm = args.norm
@@ -270,6 +271,16 @@ def run(
 
         utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
 
+    if args.save_checkpoints_to_csv:
+        if sigopt_context is not None:
+            path = f'{args.checkpoints_path}_{sigopt_context.id}.csv'
+        elif args.checkpoints_path is None:
+            path = f'full_graph_{args.dataset.replace("-", "_")}.csv'
+        else:
+            path = args.checkpoints_path
+
+        utils.save_checkpoints_to_csv(checkpoint, path)
+
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
@@ -285,7 +296,7 @@ if __name__ == '__main__':
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
-    argparser.add_argument('--hidden-feats', default=64, type=int)
+    argparser.add_argument('--hidden-feats', default=[64], nargs='+', type=int)
     argparser.add_argument('--num-bases', default=2, type=int)
     argparser.add_argument('--num-layers', default=2, type=int)
     argparser.add_argument('--norm', default='right',
@@ -304,6 +315,10 @@ if __name__ == '__main__':
     argparser.add_argument('--test-validation', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--seed', default=13, type=int)
+    argparser.add_argument('--save-checkpoints-to-csv', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--checkpoints-path',
+                           default='checkpoints', type=str)
 
     args = argparser.parse_args()
 

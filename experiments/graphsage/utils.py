@@ -8,6 +8,7 @@ import dgl
 import dgl.function as fn
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import psutil
 import sigopt
 import torch
@@ -465,3 +466,17 @@ def set_fanouts(
         result_fanouts = [1 for _ in range(num_layers)]
 
     return result_fanouts
+
+
+def save_checkpoints_to_csv(checkpoint: Callback, path: str) -> None:
+    data = {
+        'train_losses': checkpoint.train_losses,
+        'train_accuracies': checkpoint.train_accuracies,
+        'train_times': checkpoint.train_times,
+        'valid_losses': checkpoint.valid_losses,
+        'valid_accuracies': checkpoint.valid_accuracies,
+        'valid_times': checkpoint.valid_times,
+    }
+
+    df = pd.DataFrame(data)
+    df.to_csv(path)
