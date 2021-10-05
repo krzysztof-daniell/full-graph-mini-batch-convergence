@@ -119,7 +119,7 @@ def run(
         num_bases = sigopt_context.params.num_bases
         num_layers = sigopt_context.params.num_layers
         norm = 'right'
-        batch_norm = bool(sigopt_context.params.batch_norm)
+        layer_norm = bool(sigopt_context.params.layer_norm)
         activation = sigopt_context.params.activation
         input_dropout = sigopt_context.params.input_dropout
         dropout = sigopt_context.params.dropout
@@ -145,7 +145,7 @@ def run(
         num_bases = args.num_bases
         num_layers = args.num_layers
         norm = args.norm
-        batch_norm = args.batch_norm
+        layer_norm = args.layer_norm
         activation = args.activation
         input_dropout = args.input_dropout
         dropout = args.dropout
@@ -189,7 +189,7 @@ def run(
         num_bases,
         num_layers,
         norm=norm,
-        batch_norm=batch_norm,
+        layer_norm=layer_norm,
         input_dropout=input_dropout,
         dropout=dropout,
         activation=activations[activation],
@@ -335,7 +335,7 @@ if __name__ == '__main__':
     argparser.add_argument('--num-layers', default=2, type=int)
     argparser.add_argument('--norm', default='right',
                            type=str, choices=['both', 'none', 'right'])
-    argparser.add_argument('--batch-norm', default=False,
+    argparser.add_argument('--layer-norm', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--input-dropout', default=0.1, type=float)
     argparser.add_argument('--dropout', default=0.5, type=float)

@@ -103,17 +103,17 @@ def run(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        embedding_lr = sigopt_context.params.embedding_lr
-        model_lr = sigopt_context.params.model_lr
+        embedding_lr = sigopt_context.params.lr
+        model_lr = sigopt_context.params.lr
         hidden_feats = sigopt_context.params.hidden_feats
         num_bases = sigopt_context.params.num_bases
         num_layers = sigopt_context.params.num_layers
-        norm = sigopt_context.params.norm
-        batch_norm = bool(sigopt_context.params.batch_norm)
+        norm = 'right'
+        layer_norm = bool(sigopt_context.params.layer_norm)
         activation = sigopt_context.params.activation
         input_dropout = sigopt_context.params.input_dropout
         dropout = sigopt_context.params.dropout
-        self_loop = bool(sigopt_context.params.self_loop)
+        self_loop = True
     else:
         embedding_lr = args.embedding_lr
         model_lr = args.model_lr
@@ -122,7 +122,7 @@ def run(
         num_bases = args.num_bases
         num_layers = args.num_layers
         norm = args.norm
-        batch_norm = args.batch_norm
+        layer_norm = args.layer_norm
         activation = args.activation
         input_dropout = args.input_dropout
         dropout = args.dropout
@@ -154,7 +154,7 @@ def run(
         num_bases,
         num_layers,
         norm=norm,
-        batch_norm=batch_norm,
+        layer_norm=layer_norm,
         input_dropout=input_dropout,
         dropout=dropout,
         activation=activations[activation],
@@ -301,7 +301,7 @@ if __name__ == '__main__':
     argparser.add_argument('--num-layers', default=2, type=int)
     argparser.add_argument('--norm', default='right',
                            type=str, choices=['both', 'none', 'right'])
-    argparser.add_argument('--batch-norm', default=False,
+    argparser.add_argument('--layer-norm', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--input-dropout', default=0.1, type=float)
     argparser.add_argument('--dropout', default=0.5, type=float)

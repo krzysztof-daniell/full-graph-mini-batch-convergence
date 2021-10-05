@@ -1,12 +1,6 @@
 name: rgcn - ogbn-mag - full-graph - accuracy
 parameters: 
-  - name: model_lr
-    type: double
-    transformation: log
-    bounds:
-      min: 0.001
-      max: 0.1
-  - name: embedding_lr
+  - name: lr
     type: double
     transformation: log
     bounds:
@@ -25,10 +19,7 @@ parameters:
     bounds:
       min: 2
       max: 8
-  - name: norm
-    type: categorical
-    categorical_values: [both, none, right]
-  - name: batch_norm
+  - name: layer_norm
     type: int
     grid: [0, 1]
   - name: activation 
@@ -40,9 +31,6 @@ parameters:
   - name: dropout
     type: double
     grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
-  - name: self_loop
-    type: int
-    grid: [0, 1]
 metrics:
   - name: best epoch 
     strategy: store
