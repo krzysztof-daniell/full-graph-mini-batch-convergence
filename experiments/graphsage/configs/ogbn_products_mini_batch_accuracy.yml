@@ -25,10 +25,10 @@ parameters:
     categorical_values: [leaky_relu, relu]
   - name: input_dropout
     type: double
-    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
   - name: dropout
     type: double
-    grid: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+    grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
   - name: batch_size
     type: int
     grid: [256, 512, 768, 1024]
