@@ -38,13 +38,13 @@ metrics:
   - name: best epoch - train loss
     strategy: store
     objective: minimize
-  - name: best epoch - train accuracy
+  - name: best epoch - train score
     strategy: store
     objective: maximize
   - name: best epoch - valid loss
     strategy: optimize
     objective: minimize
-  - name: best epoch - valid accuracy
+  - name: best epoch - valid score
     strategy: store
     objective: maximize
   - name: best epoch - training time
