@@ -59,6 +59,6 @@ metrics:
   - name: experiment time
     strategy: constraint
     objective: minimize
-    threshold: 18000
+    threshold: 25200
 budget: 100
 parallel_bandwidth: 4
