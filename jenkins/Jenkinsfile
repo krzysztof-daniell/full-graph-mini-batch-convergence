@@ -104,6 +104,11 @@ pipeline {
         NODE_2_MEMORY = '1'
     }
     parameters {
+        choice(
+            name: 'SIGOPT_API_TOKEN',
+            choices: ['Eddie', 'Krzysztof'],
+            description: 'SigOpt API Token'
+        )
         string(
             name: 'EXPERIMENT_ID',
             description: 'Experiment ID (if not provided, new experiment will be created)'
@@ -200,7 +205,7 @@ pipeline {
             steps {
                 script {
                     withCredentials([string(
-                        credentialsId: 'sigopt-api-token', 
+                        credentialsId: 'sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}',
                         variable: 'sigoptAPIToken'
                     )]) {
                         if (!env.EXPERIMENT_ID) {
