@@ -174,7 +174,7 @@ def run(
     checkpoint = utils.Callback(
         args.early_stopping_patience,
         args.early_stopping_monitor,
-        timeout=18_000,
+        timeout=25_200,
         log_checkpoint_every=np.ceil(args.num_epochs / 200),
     )
 
