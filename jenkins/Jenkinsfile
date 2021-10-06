@@ -204,7 +204,7 @@ pipeline {
             agent { label 'machine-01' }
             steps {
                 script {
-                    String sigoptAPITokenID = 'sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}'
+                    String sigoptAPITokenID = "sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}"
                     withCredentials([string(
                         credentialsId: sigoptAPITokenID,
                         variable: 'sigoptAPIToken'
