@@ -243,7 +243,7 @@ def run(
             'best epoch - training time': checkpoint.best_epoch_training_time,
             'avg train epoch time': checkpoint.avg_train_time,
             'avg valid epoch time': checkpoint.avg_valid_time,
-            'experiment time': checkpoint.experiment_time,
+            'run time': checkpoint.experiment_time,
         }
 
         if args.test_validation:
