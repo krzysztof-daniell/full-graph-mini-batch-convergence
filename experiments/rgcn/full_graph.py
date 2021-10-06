@@ -335,6 +335,7 @@ if __name__ == '__main__':
         while not experiment.is_finished():
             sigopt_context = experiment.create_run()
             run(args, sigopt_context=sigopt_context)
+            sigopt_context.end()
             # with experiment.create_run() as sigopt_context:
             #     try:
             #         run(args, sigopt_context=sigopt_context)
