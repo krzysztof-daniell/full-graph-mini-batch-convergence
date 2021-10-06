@@ -248,11 +248,6 @@ pipeline {
                             )
                         }
                     }
-                    post {
-                        always {
-                            sh 'docker stop dgl-sigopt-node-1'
-                        }
-                    }
                 }
                 stage('Machine 1 - Node 2') {
                     agent { label 'machine-01' }
@@ -271,11 +266,6 @@ pipeline {
                                 params.TRAINING_METHOD,
                                 params.OPTIMIZATION_TARGET
                             )
-                        }
-                    }
-                    post {
-                        always {
-                            sh 'docker stop dgl-sigopt-node-2'
                         }
                     }
                 }
@@ -298,11 +288,6 @@ pipeline {
                             )
                         } 
                     }
-                    post {
-                        always {
-                            sh 'docker stop dgl-sigopt-node-1'
-                        }
-                    }
                 }
                 stage('Machine 2 - Node 2') {
                     agent { label 'machine-02' }
@@ -323,12 +308,19 @@ pipeline {
                             )
                         } 
                     }
-                    post {
-                        always {
-                            sh 'docker stop dgl-sigopt-node-2'
-                        }
-                    }
                 }
+            }
+        }
+    }
+    post {
+        always {
+            node('machine-01') {
+                sh 'docker stop dgl-sigopt-node-1'
+                sh 'docker stop dgl-sigopt-node-2'
+            }
+            node('machine-02') {
+                sh 'docker stop dgl-sigopt-node-1'
+                sh 'docker stop dgl-sigopt-node-2'
             }
         }
     }
