@@ -18,8 +18,8 @@ def run_experiment(args: argparse.ArgumentParser):
     elif args.optimization_target == 'accuracy':
         arguments.append('--no-test-validation')
 
-    if args.checkpoints_path is not None:
-        arguments.append(f'--checkpoints-path {args.checkpoints_path}')
+    # if args.checkpoints_path is not None:
+    #     arguments.append(f'--checkpoints-path {args.checkpoints_path}')
 
     arguments = ' '.join(arguments)
 
