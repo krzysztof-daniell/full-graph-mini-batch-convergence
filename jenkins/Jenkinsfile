@@ -203,10 +203,11 @@ pipeline {
         stage('Setup Experiment') {
             agent { label 'machine-01' }
             steps {
+                env.SIGOPT_API_TOKEN_ID = "sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}"
+
                 script {
-                    String sigoptAPITokenID = "sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}"
                     withCredentials([string(
-                        credentialsId: sigoptAPITokenID,
+                        credentialsId: env.SIGOPT_API_TOKEN_ID,
                         variable: 'sigoptAPIToken'
                     )]) {
                         if (!env.EXPERIMENT_ID) {
@@ -232,7 +233,7 @@ pipeline {
                     agent { label 'machine-01' }
                     steps {
                         withCredentials([string(
-                            credentialsId: 'sigopt-api-token',
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
                             variable: 'sigoptAPIToken'
                         )]) {
                             runExperiment(
@@ -257,7 +258,7 @@ pipeline {
                     agent { label 'machine-01' }
                     steps {
                         withCredentials([string(
-                            credentialsId: 'sigopt-api-token', 
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
                             variable: 'sigoptAPIToken'
                         )]) {
                             runExperiment(
@@ -282,7 +283,7 @@ pipeline {
                     agent { label 'machine-02' }
                     steps {
                         withCredentials([string(
-                            credentialsId: 'sigopt-api-token', 
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
                             variable: 'sigoptAPIToken'
                         )]) {
                             runExperiment(
@@ -307,7 +308,7 @@ pipeline {
                     agent { label 'machine-02' }
                     steps {
                         withCredentials([string(
-                            credentialsId: 'sigopt-api-token', 
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
                             variable: 'sigoptAPIToken'
                         )]) {
                             runExperiment(
