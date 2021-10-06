@@ -94,9 +94,7 @@ def run(
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
-        args.dataset,
-        root=args.dataset_root,
-    )
+        args.dataset, root=args.dataset_root)
     predict_category = dataset.predict_category
     labels = hg.nodes[predict_category].data['labels']
 
@@ -163,13 +161,8 @@ def run(
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()),
-        lr=embedding_lr
-    )
-    model_optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=model_lr
-    )
+        embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
+    model_optimizer = torch.optim.Adam(model.parameters(), lr=model_lr)
 
     checkpoint = utils.Callback(
         args.early_stopping_patience,
@@ -226,6 +219,10 @@ def run(
 
         if checkpoint.should_stop:
             print('!! Early Stopping !!')
+
+            break
+        elif checkpoint.timeout:
+            print('!! Timeout !!')
 
             break
 
@@ -293,7 +290,7 @@ if __name__ == '__main__':
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--project-id', default="rgcn", type=str)
-    argparser.add_argument('--num-epochs', default=500, type=int)
+    argparser.add_argument('--num-epochs', default=1000, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
     argparser.add_argument('--hidden-feats', default=[64], nargs='+', type=int)

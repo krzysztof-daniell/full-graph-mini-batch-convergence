@@ -104,9 +104,7 @@ def run(
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
-        args.dataset,
-        root=args.dataset_root,
-    )
+        args.dataset, root=args.dataset_root)
     predict_category = dataset.predict_category
     labels = hg.nodes[predict_category].data['labels']
 
