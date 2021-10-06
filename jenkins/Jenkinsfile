@@ -203,9 +203,9 @@ pipeline {
         stage('Setup Experiment') {
             agent { label 'machine-01' }
             steps {
-                env.SIGOPT_API_TOKEN_ID = "sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}"
-
                 script {
+                    env.SIGOPT_API_TOKEN_ID = "sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}"
+
                     withCredentials([string(
                         credentialsId: env.SIGOPT_API_TOKEN_ID,
                         variable: 'sigoptAPIToken'
