@@ -314,8 +314,7 @@ if __name__ == '__main__':
     argparser.add_argument('--seed', default=13, type=int)
     argparser.add_argument('--save-checkpoints-to-csv', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--checkpoints-path',
-                           default='checkpoints', type=str)
+    argparser.add_argument('--checkpoints-path', default=None, type=str)
 
     args = argparser.parse_args()
 
@@ -334,10 +333,12 @@ if __name__ == '__main__':
         experiment = sigopt.get_experiment(args.experiment_id)
 
         while not experiment.is_finished():
-            with experiment.create_run() as sigopt_context:
-                try:
-                    run(args, sigopt_context=sigopt_context)
-                except:
-                    sigopt_context.log_failure()
+            sigopt_context = experiment.create_run()
+            run(args, sigopt_context=sigopt_context)
+            # with experiment.create_run() as sigopt_context:
+            #     try:
+            #         run(args, sigopt_context=sigopt_context)
+            #     except:
+            #         sigopt_context.log_failure()
     else:
         run(args)
