@@ -19,6 +19,7 @@ def run_experiment(args: argparse.ArgumentParser):
         arguments.append('--no-test-validation')
 
     if args.checkpoints_path is not None:
+        arguments.append('--save-checkpoints-to-csv')
         arguments.append(f'--checkpoints-path {args.checkpoints_path}')
 
     arguments = ' '.join(arguments)
