@@ -84,7 +84,7 @@ void runExperiment(
             --dataset ${dataset} \
             --training-method ${trainingMethod} \
             --optimization-target ${optimizationTarget} \
-            --checkpoints-path /root/logs/${model}_${dataset}_${trainingMethod}_${optimizationTarget}'
+            --checkpoints-path /root/logs/${model}_${dataset.replaceAll("-", "_")}_${trainingMethod.replaceAll("-", "_")}_${optimizationTarget}'
     """
 }
 
