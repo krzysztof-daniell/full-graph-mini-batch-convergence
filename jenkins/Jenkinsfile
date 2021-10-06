@@ -162,14 +162,16 @@ pipeline {
                             env.IMAGE_NAME,
                             env.NODE_1_CORES,
                             env.NODE_1_MEMORY,
-                            env.DATASET_VOLUME
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
                         )
                         runContainer(
                             'dgl-sigopt-node-2',
                             env.IMAGE_NAME,
                             env.NODE_2_CORES,
                             env.NODE_2_MEMORY,
-                            env.DATASET_VOLUME
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
                         )
                     }
                 }
