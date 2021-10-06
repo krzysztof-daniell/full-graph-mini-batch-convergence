@@ -9,7 +9,9 @@ parameters:
       max: 0.1
   - name: num_layers
     type: int
-    grid: [2, 3]
+    bounds:
+      min: 2
+      max: 4
   - name: hidden_feats
     type: int
     grid: [64, 128, 192, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024]
