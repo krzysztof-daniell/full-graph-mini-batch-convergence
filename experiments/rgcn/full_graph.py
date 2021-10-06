@@ -329,9 +329,15 @@ if __name__ == '__main__':
                 '--sigopt-api-token argument or set '
                 'SIGOPT_API_TOKEN environment variable.'
             )
+
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
+
         while not experiment.is_finished():
-            run(args, experiment=experiment)
+            with experiment.create_run() as sigopt_context:
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
     else:
-        run(args, experiment=None)
+        run(args)
