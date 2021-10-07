@@ -251,7 +251,7 @@ def run(
             metrics['best epoch - test score'] = test_score
             metrics['test epoch time'] = test_time
 
-        utils.log_metrics_to_sigopt(sigopt_context, **metrics)
+        utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
 
     if args.save_checkpoints_to_csv:
         if sigopt_context is not None:
@@ -278,10 +278,10 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--num-epochs', default=500, type=int)
+    argparser.add_argument('--num-epochs', default=200, type=int)
     argparser.add_argument('--lr', default=0.003, type=float)
     argparser.add_argument('--hidden-feats', default=[256],
-                           nargs='+', type=int)
+                           nargs='+', type=int) 
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--aggregator-type', default='mean',
                            type=str, choices=['gcn', 'mean'])
@@ -325,9 +325,11 @@ if __name__ == '__main__':
 
         while not experiment.is_finished():
             with experiment.create_run() as sigopt_context:
-                try:
-                    run(args, sigopt_context=sigopt_context)
-                except:
-                    sigopt_context.log_failure()
+                # try:
+                #     run(args, sigopt_context=sigopt_context)
+                # except:
+                #     sigopt_context.log_failure()
+                run(args, sigopt_context=sigopt_context)
+            break
     else:
         run(args)
