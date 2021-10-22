@@ -1,5 +1,5 @@
 __pycache__
 .vscode
-datasets
+dataset
 dgl
 scratch.py

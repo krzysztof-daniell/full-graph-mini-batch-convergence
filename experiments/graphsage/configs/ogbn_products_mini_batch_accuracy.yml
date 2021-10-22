@@ -63,7 +63,7 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-  - name: experiment time
+  - name: run time
     strategy: constraint
     objective: minimize
     threshold: 25200

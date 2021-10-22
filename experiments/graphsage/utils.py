@@ -3,6 +3,7 @@ import shutil
 import sys
 from copy import deepcopy
 from typing import Union
+from time import sleep
 
 import dgl
 import dgl.function as fn
@@ -207,6 +208,7 @@ def log_metrics_to_sigopt(
 ) -> None:
     for name, value in metrics.items():
         sigopt_context.log_metric(name=name, value=value)
+        sleep(0.3)
 
     metrics_plot = get_metrics_plot(
         checkpoint.train_accuracies,
@@ -402,12 +404,10 @@ def log_system_info() -> None:
     sigopt.log_metadata("Python version", sys.version.split()[0])
     sigopt.log_metadata("Operating System", sys.platform)
     sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
-    # run.log_metadata("Process CPU Percent", process.cpu_percent())
     sigopt.log_metadata("psutil.virtual_memory().total",
                         psutil._common.bytes2human(virtual_memory.total))
     sigopt.log_metadata("psutil.virtual_memory().available",
                         psutil._common.bytes2human(virtual_memory.available))
-    # run.log_metadata("Virtual Memory Percent", virtual_memory.percent)
 
 
 def get_evaluation_score(
