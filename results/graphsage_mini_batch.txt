@@ -69,3 +69,52 @@ Epoch: 066 Train Loss: 0.22 Valid Loss: 0.27 Train Score: 0.9340 Valid Score: 0.
 Epoch: 067 Train Loss: 0.21 Valid Loss: 0.28 Train Score: 0.9355 Valid Score: 0.9284 Train Epoch Time: 151.62 Valid Epoch Time: 17.28
 !! Early Stopping !!
 Test Loss: 1.27 Test Score: 79.79 % Test Epoch Time: 17.65
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --dataset ogbn-products --lr 0.0008040953372703074 --hidden-feats 512 --num-layers 4 --aggregator-type mean --no-batch-norm --input-dropout 0.1 --dropout 0.2 --activation leaky_relu --batch-size 768 --fanouts 2 2 2 3 --test-validation
+Epoch: 001 Train Loss: 0.99 Valid Loss: 0.49 Train Score: 0.7645 Valid Score: 0.8774 Train Epoch Time: 42.58 Valid Epoch Time: 21.30
+Epoch: 002 Train Loss: 0.56 Valid Loss: 0.41 Train Score: 0.8547 Valid Score: 0.8914 Train Epoch Time: 43.10 Valid Epoch Time: 21.37
+Epoch: 003 Train Loss: 0.49 Valid Loss: 0.39 Train Score: 0.8686 Valid Score: 0.8962 Train Epoch Time: 43.83 Valid Epoch Time: 21.38
+Epoch: 004 Train Loss: 0.46 Valid Loss: 0.36 Train Score: 0.8763 Valid Score: 0.9026 Train Epoch Time: 44.26 Valid Epoch Time: 21.39
+Epoch: 005 Train Loss: 0.43 Valid Loss: 0.36 Train Score: 0.8820 Valid Score: 0.9057 Train Epoch Time: 44.56 Valid Epoch Time: 21.41
+Epoch: 006 Train Loss: 0.41 Valid Loss: 0.34 Train Score: 0.8863 Valid Score: 0.9081 Train Epoch Time: 44.71 Valid Epoch Time: 21.44
+Epoch: 007 Train Loss: 0.40 Valid Loss: 0.34 Train Score: 0.8900 Valid Score: 0.9089 Train Epoch Time: 44.95 Valid Epoch Time: 21.44
+Epoch: 008 Train Loss: 0.39 Valid Loss: 0.33 Train Score: 0.8909 Valid Score: 0.9126 Train Epoch Time: 45.13 Valid Epoch Time: 22.38
+Epoch: 009 Train Loss: 0.37 Valid Loss: 0.33 Train Score: 0.8954 Valid Score: 0.9138 Train Epoch Time: 46.12 Valid Epoch Time: 21.56
+Epoch: 010 Train Loss: 0.36 Valid Loss: 0.32 Train Score: 0.8978 Valid Score: 0.9132 Train Epoch Time: 45.22 Valid Epoch Time: 21.56
+Epoch: 011 Train Loss: 0.36 Valid Loss: 0.31 Train Score: 0.8982 Valid Score: 0.9169 Train Epoch Time: 45.62 Valid Epoch Time: 21.54
+Epoch: 012 Train Loss: 0.35 Valid Loss: 0.31 Train Score: 0.9014 Valid Score: 0.9166 Train Epoch Time: 45.56 Valid Epoch Time: 21.66
+Epoch: 013 Train Loss: 0.35 Valid Loss: 0.31 Train Score: 0.9005 Valid Score: 0.9174 Train Epoch Time: 45.79 Valid Epoch Time: 21.52
+Epoch: 014 Train Loss: 0.35 Valid Loss: 0.30 Train Score: 0.9010 Valid Score: 0.9188 Train Epoch Time: 45.75 Valid Epoch Time: 21.54
+Epoch: 015 Train Loss: 0.34 Valid Loss: 0.30 Train Score: 0.9038 Valid Score: 0.9191 Train Epoch Time: 45.75 Valid Epoch Time: 21.52
+Epoch: 016 Train Loss: 0.33 Valid Loss: 0.30 Train Score: 0.9061 Valid Score: 0.9198 Train Epoch Time: 45.66 Valid Epoch Time: 21.58
+Epoch: 017 Train Loss: 0.32 Valid Loss: 0.29 Train Score: 0.9081 Valid Score: 0.9199 Train Epoch Time: 45.55 Valid Epoch Time: 21.54
+Epoch: 018 Train Loss: 0.32 Valid Loss: 0.29 Train Score: 0.9080 Valid Score: 0.9225 Train Epoch Time: 45.48 Valid Epoch Time: 21.51
+Epoch: 019 Train Loss: 0.31 Valid Loss: 0.29 Train Score: 0.9101 Valid Score: 0.9219 Train Epoch Time: 45.82 Valid Epoch Time: 21.57
+Epoch: 020 Train Loss: 0.31 Valid Loss: 0.29 Train Score: 0.9107 Valid Score: 0.9227 Train Epoch Time: 45.94 Valid Epoch Time: 21.55
+Epoch: 021 Train Loss: 0.31 Valid Loss: 0.29 Train Score: 0.9098 Valid Score: 0.9226 Train Epoch Time: 45.90 Valid Epoch Time: 21.54
+Epoch: 022 Train Loss: 0.31 Valid Loss: 0.29 Train Score: 0.9112 Valid Score: 0.9237 Train Epoch Time: 45.86 Valid Epoch Time: 21.56
+Epoch: 023 Train Loss: 0.30 Valid Loss: 0.29 Train Score: 0.9130 Valid Score: 0.9218 Train Epoch Time: 45.81 Valid Epoch Time: 21.68
+Epoch: 024 Train Loss: 0.30 Valid Loss: 0.28 Train Score: 0.9134 Valid Score: 0.9248 Train Epoch Time: 45.67 Valid Epoch Time: 21.54
+Epoch: 025 Train Loss: 0.30 Valid Loss: 0.28 Train Score: 0.9138 Valid Score: 0.9235 Train Epoch Time: 46.02 Valid Epoch Time: 21.58
+Epoch: 026 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9147 Valid Score: 0.9244 Train Epoch Time: 45.84 Valid Epoch Time: 21.58
+Epoch: 027 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9148 Valid Score: 0.9251 Train Epoch Time: 44.34 Valid Epoch Time: 21.55
+Epoch: 028 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9147 Valid Score: 0.9246 Train Epoch Time: 44.46 Valid Epoch Time: 21.54
+Epoch: 029 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9149 Valid Score: 0.9258 Train Epoch Time: 44.25 Valid Epoch Time: 21.54
+Epoch: 030 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9161 Valid Score: 0.9258 Train Epoch Time: 44.16 Valid Epoch Time: 21.61
+Epoch: 031 Train Loss: 0.28 Valid Loss: 0.28 Train Score: 0.9169 Valid Score: 0.9260 Train Epoch Time: 44.14 Valid Epoch Time: 21.59
+Epoch: 032 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9162 Valid Score: 0.9254 Train Epoch Time: 44.59 Valid Epoch Time: 21.59
+Epoch: 033 Train Loss: 0.28 Valid Loss: 0.27 Train Score: 0.9162 Valid Score: 0.9263 Train Epoch Time: 45.29 Valid Epoch Time: 21.60
+Epoch: 034 Train Loss: 0.29 Valid Loss: 0.28 Train Score: 0.9170 Valid Score: 0.9255 Train Epoch Time: 45.38 Valid Epoch Time: 21.59
+Epoch: 035 Train Loss: 0.29 Valid Loss: 0.27 Train Score: 0.9169 Valid Score: 0.9255 Train Epoch Time: 45.58 Valid Epoch Time: 21.58
+Epoch: 036 Train Loss: 0.28 Valid Loss: 0.28 Train Score: 0.9186 Valid Score: 0.9259 Train Epoch Time: 45.61 Valid Epoch Time: 21.56
+Epoch: 037 Train Loss: 0.27 Valid Loss: 0.28 Train Score: 0.9204 Valid Score: 0.9265 Train Epoch Time: 43.97 Valid Epoch Time: 21.59
+Epoch: 038 Train Loss: 0.27 Valid Loss: 0.28 Train Score: 0.9200 Valid Score: 0.9258 Train Epoch Time: 44.30 Valid Epoch Time: 21.56
+Epoch: 039 Train Loss: 0.27 Valid Loss: 0.28 Train Score: 0.9209 Valid Score: 0.9264 Train Epoch Time: 44.23 Valid Epoch Time: 21.57
+Epoch: 040 Train Loss: 0.27 Valid Loss: 0.28 Train Score: 0.9203 Valid Score: 0.9267 Train Epoch Time: 44.27 Valid Epoch Time: 21.58
+Epoch: 041 Train Loss: 0.27 Valid Loss: 0.28 Train Score: 0.9202 Valid Score: 0.9262 Train Epoch Time: 44.33 Valid Epoch Time: 21.54
+Epoch: 042 Train Loss: 0.27 Valid Loss: 0.29 Train Score: 0.9210 Valid Score: 0.9256 Train Epoch Time: 44.24 Valid Epoch Time: 21.61
+Epoch: 043 Train Loss: 0.27 Valid Loss: 0.28 Train Score: 0.9214 Valid Score: 0.9274 Train Epoch Time: 44.56 Valid Epoch Time: 21.54
+Epoch: 044 Train Loss: 0.27 Valid Loss: 0.27 Train Score: 0.9220 Valid Score: 0.9275 Train Epoch Time: 44.20 Valid Epoch Time: 21.56
+Epoch: 045 Train Loss: 0.26 Valid Loss: 0.28 Train Score: 0.9229 Valid Score: 0.9258 Train Epoch Time: 44.34 Valid Epoch Time: 21.55
+!! Early Stopping !!
+Test Loss: 1.20 Test Score: 80.27 % Test Epoch Time: 21.97
