@@ -111,18 +111,18 @@ def run(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        embedding_lr = sigopt_context.params.lr
-        model_lr = sigopt_context.params.lr
-        hidden_feats = sigopt_context.params.hidden_feats
-        num_bases = sigopt_context.params.num_bases
-        num_layers = sigopt_context.params.num_layers
+        embedding_lr = sigopt_context.params['embedding_lr']
+        model_lr = sigopt_context.params['model_lr']
+        num_layers = sigopt_context.params['num_layers']
+        hidden_feats = sigopt_context.params['hidden_feats']
+        num_bases = sigopt_context.params['num_bases']
         norm = 'right'
-        layer_norm = bool(sigopt_context.params.layer_norm)
-        activation = sigopt_context.params.activation
-        input_dropout = sigopt_context.params.input_dropout
-        dropout = sigopt_context.params.dropout
+        layer_norm = bool(sigopt_context.params['layer_norm'])
+        activation = sigopt_context.params['activation']
+        input_dropout = sigopt_context.params['input_dropout']
+        dropout = sigopt_context.params['dropout']
         self_loop = True
-        batch_size = sigopt_context.params.batch_size
+        batch_size = sigopt_context.params['batch_size']
         fanouts = utils.set_fanouts(
             num_layers,
             batch_size,
@@ -195,8 +195,10 @@ def run(
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
-    embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
+    embedding_optimizer = torch.optim.SparseAdam(
+        list(embedding_layer.node_embeddings.parameters()), 
+        lr=embedding_lr
+    )
     model_optimizer = torch.optim.Adam(model.parameters(), lr=model_lr)
 
     checkpoint = utils.Callback(
@@ -375,6 +377,9 @@ if __name__ == '__main__':
                 try:
                     run(args, sigopt_context=sigopt_context)
                 except:
+                    print(f"Exception occurred: '{e}'")
                     sigopt_context.log_failure()
+                    import sys
+                    sys.exit()
     else:
         run(args)
