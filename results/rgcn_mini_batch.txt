@@ -3,3 +3,9 @@ Epoch: 001 Train Loss: 2.28 Valid Loss: 1.93 Train Score: 0.4128 Valid Score: 0.
 Epoch: 002 Train Loss: 1.62 Valid Loss: 1.82 Train Score: 0.5515 Valid Score: 0.5018 Train Epoch Time: 347.93 Valid Epoch Time: 10.64
 Epoch: 003 Train Loss: 1.20 Valid Loss: 1.85 Train Score: 0.6560 Valid Score: 0.5049 Train Epoch Time: 355.13 Valid Epoch Time: 10.73
 Test Loss: 1.91 Test Score: 0.4752 Test Epoch Time: 10.72
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets --num-epochs 3 --activation relu --batch-size 2048 --dropout 0.65 --embedding-lr 0.01744021385258164 --model-lr 0.005415189725378909 --hidden-feats 384 --input-dropout 0.5 --layer-norm --num-bases 3 --num-layers 2 --fanouts 23 29
+Epoch: 001 Train Loss: 2.70 Valid Loss: 1.97 Train Score: 0.3508 Valid Score: 0.4604 Train Epoch Time: 259.11 Valid Epoch Time: 8.07
+Epoch: 002 Train Loss: 1.77 Valid Loss: 1.80 Train Score: 0.5204 Valid Score: 0.5045 Train Epoch Time: 255.43 Valid Epoch Time: 8.12
+Epoch: 003 Train Loss: 1.32 Valid Loss: 1.88 Train Score: 0.6303 Valid Score: 0.5017 Train Epoch Time: 258.22 Valid Epoch Time: 8.14
+Test Loss: 1.90 Test Score: 0.4800 Test Epoch Time: 8.11
