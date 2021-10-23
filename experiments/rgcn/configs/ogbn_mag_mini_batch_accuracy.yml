@@ -1,7 +1,13 @@
 # ogbn_mag_mini_batch_accuracy.yml
 name: rgcn - ogbn-mag - mini-batch - accuracy
 parameters: 
-  - name: lr
+  - name: embedding_lr
+    type: double
+    transformation: log
+    bounds:
+      min: 0.001
+      max: 0.1
+  - name: model_lr
     type: double
     transformation: log
     bounds:
