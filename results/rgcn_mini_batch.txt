@@ -4,8 +4,65 @@ Epoch: 002 Train Loss: 1.62 Valid Loss: 1.82 Train Score: 0.5515 Valid Score: 0.
 Epoch: 003 Train Loss: 1.20 Valid Loss: 1.85 Train Score: 0.6560 Valid Score: 0.5049 Train Epoch Time: 355.13 Valid Epoch Time: 10.73
 Test Loss: 1.91 Test Score: 0.4752 Test Epoch Time: 10.72
 
-python mini_batch.py --dataset-root /home/ksadowski/datasets --num-epochs 3 --activation relu --batch-size 2048 --dropout 0.65 --embedding-lr 0.01744021385258164 --model-lr 0.005415189725378909 --hidden-feats 384 --input-dropout 0.5 --layer-norm --num-bases 3 --num-layers 2 --fanouts 23 29
-Epoch: 001 Train Loss: 2.70 Valid Loss: 1.97 Train Score: 0.3508 Valid Score: 0.4604 Train Epoch Time: 259.11 Valid Epoch Time: 8.07
-Epoch: 002 Train Loss: 1.77 Valid Loss: 1.80 Train Score: 0.5204 Valid Score: 0.5045 Train Epoch Time: 255.43 Valid Epoch Time: 8.12
-Epoch: 003 Train Loss: 1.32 Valid Loss: 1.88 Train Score: 0.6303 Valid Score: 0.5017 Train Epoch Time: 258.22 Valid Epoch Time: 8.14
-Test Loss: 1.90 Test Score: 0.4800 Test Epoch Time: 8.11
+#########################
+### Experiment 448231 ###
+### Random seeds 0-9 [0.4901, 0.4845, 0.4860, 0.4864, 0.4849, 0.4916, 0.4792, 0.4884, 0.4827, 0.4858]
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 0
+Epoch: 001 Train Loss: 2.30 Valid Loss: 1.92 Train Score: 0.4091 Valid Score: 0.4726 Train Epoch Time: 283.77 Valid Epoch Time: 6.46
+Epoch: 002 Train Loss: 1.62 Valid Loss: 1.81 Train Score: 0.5529 Valid Score: 0.5099 Train Epoch Time: 282.29 Valid Epoch Time: 6.50
+Epoch: 003 Train Loss: 1.24 Valid Loss: 1.90 Train Score: 0.6489 Valid Score: 0.5107 Train Epoch Time: 282.79 Valid Epoch Time: 6.49
+Test Loss: 1.86 Test Score: 0.4901 Test Epoch Time: 6.47
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 1
+Epoch: 001 Train Loss: 2.31 Valid Loss: 1.89 Train Score: 0.4090 Valid Score: 0.4798 Train Epoch Time: 283.72 Valid Epoch Time: 6.48
+Epoch: 002 Train Loss: 1.61 Valid Loss: 1.80 Train Score: 0.5559 Valid Score: 0.5085 Train Epoch Time: 285.54 Valid Epoch Time: 6.49
+Epoch: 003 Train Loss: 1.22 Valid Loss: 1.88 Train Score: 0.6540 Valid Score: 0.5130 Train Epoch Time: 283.63 Valid Epoch Time: 6.52
+Test Loss: 1.88 Test Score: 0.4845 Test Epoch Time: 6.48
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 2
+Epoch: 001 Train Loss: 2.31 Valid Loss: 1.91 Train Score: 0.4080 Valid Score: 0.4732 Train Epoch Time: 283.25 Valid Epoch Time: 6.48
+Epoch: 002 Train Loss: 1.63 Valid Loss: 1.79 Train Score: 0.5492 Valid Score: 0.5117 Train Epoch Time: 284.26 Valid Epoch Time: 6.51
+Epoch: 003 Train Loss: 1.25 Valid Loss: 1.93 Train Score: 0.6452 Valid Score: 0.5018 Train Epoch Time: 282.78 Valid Epoch Time: 6.53
+Test Loss: 1.86 Test Score: 0.4860 Test Epoch Time: 6.51
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 3
+Epoch: 001 Train Loss: 2.36 Valid Loss: 1.86 Train Score: 0.4045 Valid Score: 0.4931 Train Epoch Time: 284.84 Valid Epoch Time: 6.52
+Epoch: 002 Train Loss: 1.61 Valid Loss: 1.78 Train Score: 0.5543 Valid Score: 0.5109 Train Epoch Time: 282.82 Valid Epoch Time: 6.50
+Epoch: 003 Train Loss: 1.23 Valid Loss: 1.89 Train Score: 0.6518 Valid Score: 0.5144 Train Epoch Time: 282.36 Valid Epoch Time: 6.50
+Test Loss: 1.86 Test Score: 0.4864 Test Epoch Time: 6.51
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 4
+Epoch: 001 Train Loss: 2.34 Valid Loss: 1.87 Train Score: 0.4049 Valid Score: 0.4871 Train Epoch Time: 283.26 Valid Epoch Time: 6.54
+Epoch: 002 Train Loss: 1.62 Valid Loss: 1.81 Train Score: 0.5525 Valid Score: 0.5084 Train Epoch Time: 284.60 Valid Epoch Time: 6.54
+Epoch: 003 Train Loss: 1.23 Valid Loss: 1.91 Train Score: 0.6503 Valid Score: 0.5110 Train Epoch Time: 284.31 Valid Epoch Time: 6.59
+Test Loss: 1.88 Test Score: 0.4849 Test Epoch Time: 6.64
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 5
+Epoch: 001 Train Loss: 2.40 Valid Loss: 1.87 Train Score: 0.4014 Valid Score: 0.4880 Train Epoch Time: 284.06 Valid Epoch Time: 6.51
+Epoch: 002 Train Loss: 1.61 Valid Loss: 1.78 Train Score: 0.5572 Valid Score: 0.5152 Train Epoch Time: 284.09 Valid Epoch Time: 6.55
+Epoch: 003 Train Loss: 1.23 Valid Loss: 1.91 Train Score: 0.6523 Valid Score: 0.5095 Train Epoch Time: 282.49 Valid Epoch Time: 6.51
+Test Loss: 1.85 Test Score: 0.4916 Test Epoch Time: 6.48
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 6
+Epoch: 001 Train Loss: 2.29 Valid Loss: 1.90 Train Score: 0.4137 Valid Score: 0.4761 Train Epoch Time: 282.51 Valid Epoch Time: 6.57
+Epoch: 002 Train Loss: 1.60 Valid Loss: 1.82 Train Score: 0.5593 Valid Score: 0.5069 Train Epoch Time: 283.72 Valid Epoch Time: 6.49
+Epoch: 003 Train Loss: 1.21 Valid Loss: 1.92 Train Score: 0.6555 Valid Score: 0.5057 Train Epoch Time: 282.58 Valid Epoch Time: 6.49
+Test Loss: 1.90 Test Score: 0.4792 Test Epoch Time: 6.52
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 7
+Epoch: 001 Train Loss: 2.30 Valid Loss: 1.84 Train Score: 0.4124 Valid Score: 0.4901 Train Epoch Time: 284.39 Valid Epoch Time: 6.50
+Epoch: 002 Train Loss: 1.59 Valid Loss: 1.78 Train Score: 0.5601 Valid Score: 0.5155 Train Epoch Time: 283.13 Valid Epoch Time: 6.49
+Epoch: 003 Train Loss: 1.21 Valid Loss: 1.91 Train Score: 0.6553 Valid Score: 0.5092 Train Epoch Time: 281.84 Valid Epoch Time: 6.53
+Test Loss: 1.87 Test Score: 0.4884 Test Epoch Time: 6.52
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 8
+Epoch: 001 Train Loss: 2.30 Valid Loss: 1.87 Train Score: 0.4115 Valid Score: 0.4867 Train Epoch Time: 282.57 Valid Epoch Time: 6.58
+Epoch: 002 Train Loss: 1.60 Valid Loss: 1.80 Train Score: 0.5585 Valid Score: 0.5131 Train Epoch Time: 281.38 Valid Epoch Time: 6.53
+Epoch: 003 Train Loss: 1.22 Valid Loss: 1.88 Train Score: 0.6519 Valid Score: 0.5155 Train Epoch Time: 281.43 Valid Epoch Time: 6.53
+Test Loss: 1.88 Test Score: 0.4827 Test Epoch Time: 6.57
+
+python mini_batch.py --dataset-root /home/ksadowski/datasets/ --num-epochs 3 --embedding-lr 0.011662490989295756 --model-lr 0.010721204741160107 --hidden-feats 256 --num-bases 4 --num-layers 2 --norm right --layer-norm --input-dropout 0.6 --dropout 0.15 --activation leaky_relu --self-loop --batch-size 512 --fanouts 26 13 --test-validation --seed 9
+Epoch: 001 Train Loss: 2.31 Valid Loss: 1.85 Train Score: 0.4140 Valid Score: 0.4945 Train Epoch Time: 283.42 Valid Epoch Time: 6.55
+Epoch: 002 Train Loss: 1.58 Valid Loss: 1.78 Train Score: 0.5628 Valid Score: 0.5140 Train Epoch Time: 284.91 Valid Epoch Time: 6.55
+Epoch: 003 Train Loss: 1.21 Valid Loss: 1.90 Train Score: 0.6565 Valid Score: 0.5134 Train Epoch Time: 281.74 Valid Epoch Time: 6.64
+Test Loss: 1.86 Test Score: 0.4858 Test Epoch Time: 6.55
