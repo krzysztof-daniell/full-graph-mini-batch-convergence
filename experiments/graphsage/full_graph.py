@@ -192,6 +192,7 @@ def run(
             f'Test Epoch Time: {test_time:.2f}'
         )
 
+
     if sigopt_context is not None:
         metrics = {
             'best epoch': checkpoint.best_epoch,
@@ -210,7 +211,7 @@ def run(
             metrics['best epoch - test score'] = test_score
             metrics['test epoch time'] = test_time
 
-        utils.log_metrics_to_sigopt(sigopt_context, **metrics)
+        utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
 
     if args.save_checkpoints_to_csv:
         if sigopt_context is not None:
