@@ -317,7 +317,7 @@ def run(
 
 
 if __name__ == '__main__':
-    argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
+    argparser = argparse.ArgumentParser('RGCN NS Optimization')
 
     argparser.add_argument('--dataset', default='ogbn-mag', type=str,
                            choices=['ogbn-mag'])
