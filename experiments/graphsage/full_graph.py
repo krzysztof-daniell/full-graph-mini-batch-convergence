@@ -282,7 +282,10 @@ if __name__ == '__main__':
             with experiment.create_run() as sigopt_context:
                 try:
                     run(args, sigopt_context=sigopt_context)
-                except:
+                except Exception as e:
+                    print(f"Exception occurred: '{e}'")
                     sigopt_context.log_failure()
+                    import sys
+                    sys.exit()
     else:
         run(args)
