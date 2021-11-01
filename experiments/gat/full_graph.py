@@ -1,9 +1,11 @@
 import argparse
+import os
 from timeit import default_timer
 from typing import Callable
 
 import dgl
 import sigopt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,7 +13,6 @@ from ogb.nodeproppred import Evaluator
 
 import utils
 from model import GAT
-
 
 def train(
     model: nn.Module,
@@ -71,7 +72,11 @@ def validate(
 
     return time, loss, score
 
-def run(args: argparse.ArgumentParser) -> None:
+
+def run(
+    args: argparse.ArgumentParser, 
+    sigopt_context: sigopt.run_context = None,
+) -> None:
 
     torch.manual_seed(args.seed)
 
@@ -84,35 +89,50 @@ def run(args: argparse.ArgumentParser) -> None:
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    sigopt.params.setdefaults({
-        'lr': args.lr,
-        'node_hidden_feats': args.node_hidden_feats,
-        'num_heads': args.num_heads,
-        'num_layers': args.num_layers,
-        'norm': args.norm,
-        'batch_norm': int(args.batch_norm),
-        'input_dropout': args.input_dropout,
-        'attn_dropout': args.attn_dropout,
-        'edge_dropout': args.edge_dropout,
-        'dropout': args.dropout,
-        'negative_slope': args.negative_slope,
-        'residual': int(args.residual),
-        'activation': args.activation,
-        'use_attn_dst': int(args.use_attn_dst),
-        'bias': int(args.bias),
-    })
-
+    if sigopt_context is not None:
+        lr = sigopt_context.params.lr
+        node_hidden_feats = sigopt_context.params.node_hidden_feats
+        num_heads = sigopt_context.params.num_heads
+        num_layers = sigopt_context.params.num_layers
+        norm = args.norm
+        batch_norm = bool(sigopt_context.params.batch_norm)
+        input_dropout = sigopt_context.params.input_dropout
+        attn_dropout = sigopt_context.params.attn_dropout
+        edge_dropout = sigopt_context.params.edge_dropout
+        dropout = sigopt_context.params.dropout
+        negative_slope = sigopt_context.params.negative_slope
+        residual = bool(sigopt_context.params.residual)
+        activation = sigopt_context.params.activation
+        use_attn_dst = bool(sigopt_context.params.use_attn_dst)
+        bias = bool(sigopt_context.params.bias)
+    else:
+        lr = args.lr
+        node_hidden_feats = args.node_hidden_feats
+        num_heads = args.num_heads
+        num_layers = args.num_layers
+        norm = args.norm
+        batch_norm = args.batch_norm
+        input_dropout = args.input_dropout
+        attn_dropout = args.attn_dropout
+        edge_dropout = args.edge_dropout
+        dropout = args.dropout
+        negative_slope = args.negative_slope
+        residual = args.residual
+        activation = args.activation
+        use_attn_dst = args.use_attn_dst
+        bias = args.bias
+        
     node_in_feats = g.ndata['feat'].shape[-1]
 
     if args.dataset == 'ogbn-proteins':
-        if args.edge_hidden_feats > 0:
-            sigopt.params.setdefaults(
-                {'edge_hidden_feats': args.edge_hidden_feats})
+
+        if sigopt_context is not None:
+            edge_hidden_feats = sigopt_context.params.edge_hidden_feats
         else:
-            sigopt.params.setdefaults({'edge_hidden_feats': 16})
+            edge_hidden_feats = args.edge_hidden_feats
 
         edge_in_feats = g.edata['feat'].shape[-1]
-        edge_hidden_feats = sigopt.params.edge_hidden_feats
+        
     else:
         edge_in_feats = 0
         edge_hidden_feats = 0
@@ -124,22 +144,22 @@ def run(args: argparse.ArgumentParser) -> None:
     model = GAT(
         node_in_feats,
         edge_in_feats,
-        sigopt.params.node_hidden_feats,
+        node_hidden_feats,
         edge_hidden_feats,
         out_feats,
-        sigopt.params.num_heads,
-        sigopt.params.num_layers,
-        norm=sigopt.params.norm,
-        batch_norm=bool(sigopt.params.batch_norm),
-        input_dropout=sigopt.params.input_dropout,
-        attn_dropout=sigopt.params.attn_dropout,
-        edge_dropout=sigopt.params.edge_dropout,
-        dropout=sigopt.params.dropout,
-        negative_slope=sigopt.params.negative_slope,
-        residual=bool(sigopt.params.residual),
-        activation=activations[sigopt.params.activation],
-        use_attn_dst=bool(sigopt.params.use_attn_dst),
-        bias=bool(sigopt.params.bias),
+        num_heads,
+        num_layers,
+        norm=norm,
+        batch_norm=batch_norm,
+        input_dropout=input_dropout,
+        attn_dropout=attn_dropout,
+        edge_dropout=edge_dropout,
+        dropout=dropout,
+        negative_slope=negative_slope,
+        residual=residual,
+        activation=activations[activation],
+        use_attn_dst=use_attn_dst,
+        bias=bias,
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -147,7 +167,7 @@ def run(args: argparse.ArgumentParser) -> None:
     else:
         loss_function = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=sigopt.params.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     checkpoint = utils.Callback(args.early_stopping_patience,
                                 args.early_stopping_monitor)
@@ -167,6 +187,7 @@ def run(args: argparse.ArgumentParser) -> None:
             train_score,
             valid_score,
             model,
+            sigopt_context=sigopt_context
         )
 
         print(
@@ -185,28 +206,42 @@ def run(args: argparse.ArgumentParser) -> None:
             break
 
     if args.test_validation:
-        model.load_state_dict(checkpoint.best_epoch_model_parameters)
 
+        model.load_state_dict(checkpoint.best_epoch_model_parameters)
+        
         test_time, test_loss, test_score = validate(
-            model, loss_function, evaluator, g, test_idx)
+            model, 
+            loss_function, 
+            evaluator, 
+            g, 
+            test_idx
+        )
 
         print(
             f'Test Loss: {test_loss:.2f} '
-            f'Test Score: {test_score:.4f} % '
+            f'Test Score: {test_score * 100:.2f} % '
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        utils.log_metrics_to_sigopt(
-            checkpoint,
-            'GAT',
-            args.dataset,
-            test_loss,
-            test_score,
-            test_time,
-        )
-    else:
-        utils.log_metrics_to_sigopt(checkpoint, 'GAT NS', args.dataset)
+    if sigopt_context is not None:
 
+        metrics = {
+            'best epoch': checkpoint.best_epoch,
+            'best epoch - train loss': checkpoint.best_epoch_train_loss,
+            'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+            'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+            'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+            'best epoch - training time': checkpoint.best_epoch_training_time,
+            'avg train epoch time': np.mean(checkpoint.train_times),
+            'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'best epoch - test loss': test_loss,
+            'best epoch - test score': test_score,
+            'test epoch time': test_time
+        }
+
+        utils.log_metrics_to_sigopt(sigopt_context, **metrics)
+        
+        sigopt_context.end()
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser('GAT NS Optimization')
@@ -216,6 +251,9 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
+    argparser.add_argument('--experiment-id', default=None, type=str)
+    argparser.add_argument('--project-id', default="gat", type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
@@ -255,4 +293,20 @@ if __name__ == '__main__':
     if args.download_dataset:
         utils.download_dataset(args.dataset)
 
-    run(args)
+    if args.experiment_id is not None:
+        if os.getenv('SIGOPT_API_TOKEN') is None:
+            raise ValueError(
+                'SigOpt API token is not provided. Please provide it by '
+                '--sigopt-api-token argument or set '
+                'SIGOPT_API_TOKEN environment variable.'
+            )
+        sigopt.set_project(args.project_id)
+        experiment = sigopt.get_experiment(args.experiment_id)
+        while not experiment.is_finished():
+            with experiment.create_run() as sigopt_context:
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
+    else:
+        run(args)

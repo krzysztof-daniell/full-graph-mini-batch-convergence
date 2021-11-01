@@ -1,12 +1,16 @@
 import os
 import shutil
+import sys
 from copy import deepcopy
 from typing import Union
+from time import sleep
 
 import dgl
 import dgl.function as fn
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import psutil
 import sigopt
 import torch
 import torch.nn as nn
@@ -18,9 +22,13 @@ class Callback:
         self,
         patience: int,
         monitor: str,
+        timeout: float = None,
+        log_checkpoint_every: int = 5,
     ) -> None:
         self._patience = patience
         self._monitor = monitor
+        self._timeout = timeout
+        self._log_checkpoint_every = log_checkpoint_every
         self._lookback = 0
         self._best_epoch = None
         self._train_times = []
@@ -80,12 +88,30 @@ class Callback:
         return self._valid_accuracies[self._best_epoch]
 
     @property
-    def best_epoch_model_parameters(self) -> Union[dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
+    def best_epoch_model_parameters(
+        self,
+    ) -> Union[dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
         return self._model_parameters
+
+    @property
+    def avg_train_time(self) -> float:
+        return np.mean(self._train_times)
+
+    @property
+    def avg_valid_time(self) -> float:
+        return np.mean(self._valid_times)
+
+    @property
+    def experiment_time(self) -> float:
+        return sum(self._train_times + self._valid_times)
 
     @property
     def should_stop(self) -> bool:
         return self._lookback >= self._patience
+
+    @property
+    def timeout(self) -> bool:
+        return self.experiment_time >= self._timeout
 
     def create(
         self,
@@ -97,6 +123,7 @@ class Callback:
         train_accuracy: float,
         valid_accuracy: float,
         model: Union[nn.Module, dict[str, nn.Module]],
+        sigopt_context=None,
     ) -> None:
         self._train_times.append(train_time)
         self._valid_times.append(valid_time)
@@ -105,12 +132,13 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        sigopt.log_checkpoint({
-            'train loss': train_loss,
-            'valid loss': valid_loss,
-            'train accuracy': train_accuracy,
-            'valid accuracy': valid_accuracy,
-        })
+        if sigopt_context is not None and epoch % self._log_checkpoint_every == 0:
+            sigopt_context.log_checkpoint({
+                'train loss': train_loss,
+                'valid loss': valid_loss,
+                'train accuracy': train_accuracy,
+                'valid accuracy': valid_accuracy,
+            })
 
         best_epoch = False
 
@@ -174,37 +202,13 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
+    sigopt_context: sigopt.run_context,
     checkpoint: Callback,
-    model_name: str,
-    dataset: str,
-    test_loss: float = None,
-    test_accuracy: float = None,
-    test_time: float = None,
+    **metrics,
 ) -> None:
-    sigopt.log_model(model_name)
-    sigopt.log_dataset(dataset)
-    sigopt.log_metric('best epoch', checkpoint.best_epoch)
-    sigopt.log_metric('best epoch - train loss',
-                      checkpoint.best_epoch_train_loss)
-    sigopt.log_metric('best epoch - train accuracy',
-                      checkpoint.best_epoch_train_accuracy)
-    sigopt.log_metric('best epoch - valid loss',
-                      checkpoint.best_epoch_valid_loss)
-    sigopt.log_metric('best epoch - valid accuracy',
-                      checkpoint.best_epoch_valid_accuracy)
-    sigopt.log_metric('best epoch - training time',
-                      checkpoint.best_epoch_training_time)
-    sigopt.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
-    sigopt.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
-
-    if test_loss is not None:
-        sigopt.log_metric('best epoch - test loss', test_loss)
-
-    if test_accuracy is not None:
-        sigopt.log_metric('best epoch - test accuracy', test_accuracy)
-
-    if test_time is not None:
-        sigopt.log_metric('test epoch time', test_time)
+    for name, value in metrics.items():
+        sigopt_context.log_metric(name=name, value=value)
+        sleep(0.3)
 
     metrics_plot = get_metrics_plot(
         checkpoint.train_accuracies,
@@ -213,7 +217,7 @@ def log_metrics_to_sigopt(
         checkpoint.valid_losses,
     )
 
-    sigopt.log_image(metrics_plot, name='convergence plot')
+    sigopt_context.log_image(metrics_plot, name='convergence plot')
 
 
 def download_dataset(dataset: str) -> None:
@@ -378,17 +382,32 @@ def process_dataset(
 
 
 def set_sigopt_fanouts(fanouts: str) -> list[int]:
-    result = [int(i) for i in fanouts.split(',')]
+    default_fanouts = [int(i) for i in fanouts.split(',')]
+    sigopt_fanouts = []
 
-    for i in reversed(range(len(result))):
-        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': result[i]})
+    for i in range(sigopt.get_parameter('num_layers', default=len(default_fanouts))):
+        if i < len(default_fanouts):
+            fanout = sigopt.get_parameter(
+                f'layer_{i + 1}_fanout', default=default_fanouts[i])
+        else:
+            fanout = sigopt.get_parameter(f'layer_{i + 1}_fanout')
 
-        result.pop(i)
+        sigopt_fanouts.append(fanout)
 
-    for i in range(sigopt.params.num_layers):
-        result.append(sigopt.params[f'layer_{i + 1}_fanout'])
+    return sigopt_fanouts
 
-    return result
+
+def log_system_info() -> None:
+    # https://psutil.readthedocs.io/en/latest/#processes
+    process = psutil.Process()
+    virtual_memory = psutil.virtual_memory()
+    sigopt.log_metadata("Python version", sys.version.split()[0])
+    sigopt.log_metadata("Operating System", sys.platform)
+    sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
+    sigopt.log_metadata("psutil.virtual_memory().total",
+                        psutil._common.bytes2human(virtual_memory.total))
+    sigopt.log_metadata("psutil.virtual_memory().available",
+                        psutil._common.bytes2human(virtual_memory.available))
 
 
 def get_evaluation_score(
@@ -409,3 +428,55 @@ def get_evaluation_score(
     }).popitem()
 
     return score
+
+
+def set_fanouts(
+    num_layers: int,
+    batch_size: int,
+    max_num_batch_nodes: int,
+    fanout_slope: float,
+    max_fanout: int = 40,
+) -> list[int]:
+    result_fanouts = None
+
+    for base_fanout in range(max_fanout + 1):
+        fanouts = []
+
+        for n in range(num_layers):
+            fanout = int((fanout_slope ** n) * base_fanout)
+
+            if fanout < 1:
+                fanout = 1
+
+            if fanout > max_fanout:
+                fanout = max_fanout
+
+            fanouts.append(fanout)
+
+        if len(fanouts) == num_layers:
+            result = batch_size
+
+            for fanout in reversed(fanouts):
+                result += result * fanout
+
+            if result <= max_num_batch_nodes:
+                result_fanouts = fanouts
+
+    if result_fanouts is None:
+        result_fanouts = [1 for _ in range(num_layers)]
+
+    return result_fanouts
+
+
+def save_checkpoints_to_csv(checkpoint: Callback, path: str) -> None:
+    data = {
+        'train_losses': checkpoint.train_losses,
+        'train_accuracies': checkpoint.train_accuracies,
+        'train_times': checkpoint.train_times,
+        'valid_losses': checkpoint.valid_losses,
+        'valid_accuracies': checkpoint.valid_accuracies,
+        'valid_times': checkpoint.valid_times,
+    }
+
+    df = pd.DataFrame(data)
+    df.to_csv(path)

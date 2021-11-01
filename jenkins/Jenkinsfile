@@ -1,0 +1,327 @@
+void runContainer(
+    String containerName, 
+    String imageName,
+    String availableNumaCores,
+    String availableNumaMemory,
+    String datasetsVolume,
+    String logsVolume
+) {
+    sh """docker run \
+        -d \
+        -it \
+        --rm \
+        --ipc host \
+        --cpuset-cpus ${availableNumaCores} \
+        --cpuset-mems ${availableNumaMemory} \
+        --memory 120g \
+        --volume ${datasetsVolume}:/root/datasets \
+        --volume ${logsVolume}:/root/logs \
+        --name ${containerName} \
+        ${imageName}
+    """
+}
+
+void turnOffHyperthreading(String containerName, String experimentWorkDir) {
+    sh """docker exec -w ${experimentWorkDir} ${containerName} bash -c \
+        'bash turn_off_hyperthreading.sh'
+    """
+}
+
+void cloneRepository(
+    String containerName,
+    String repositoryURL
+) {
+    sh """docker exec ${containerName} bash -c \
+        'git clone ${repositoryURL} \
+        && cd full-graph-mini-batch-convergence \
+        && git checkout uniform_hidden_feats_with_max_batch_nodes_fanout_strat'
+    """
+}
+
+String createExperiment(
+    String containerName,
+    String experimentWorkDir,
+    String sigoptAPIToken,
+    String model,
+    String dataset,
+    String trainingMethod,
+    String optimizationTarget
+) {
+    script {
+        String experimentID = sh (
+            returnStdout: true,
+            script: """docker exec -w ${experimentWorkDir} ${containerName} bash -c \
+                'python create_experiment.py \
+                    --sigopt-api-token ${sigoptAPIToken} \
+                    --model ${model} \
+                    --dataset ${dataset} \
+                    --training-method ${trainingMethod} \
+                    --optimization-target ${optimizationTarget}'
+            """
+        ).trim()
+
+        return experimentID
+    }
+}
+
+void runExperiment(
+    String containerName,
+    String experimentWorkDir,
+    String sigoptAPIToken,
+    String experimentID,
+    String model,
+    String dataset,
+    String trainingMethod,
+    String optimizationTarget
+) {
+    sh """docker exec -w ${experimentWorkDir} ${containerName} bash -c \
+        'python run_experiment.py \
+            --sigopt-api-token ${sigoptAPIToken} \
+            --experiment-id ${experimentID} \
+            --dataset ${dataset} \
+            --dataset-root /root/datasets \
+            --model ${model} \
+            --dataset ${dataset} \
+            --training-method ${trainingMethod} \
+            --optimization-target ${optimizationTarget} \
+            --checkpoints-path /root/logs/${model}_${dataset.replaceAll("-", "_")}_${trainingMethod.replaceAll("-", "_")}_${optimizationTarget}'
+    """
+}
+
+pipeline {
+    agent any
+    environment {
+        REPOSITORY_URL = 'https://github.com/ksadowski13/full-graph-mini-batch-convergence.git'
+
+        IMAGE_NAME = 'dgl-sigopt'
+        DATASET_VOLUME = '/home/jenkins/volumes/datasets'
+        LOGS_VOLUME = '/home/jenkins/volumes/logs/sigopt'
+        EXPERIMENT_WORK_DIR = '/root/full-graph-mini-batch-convergence/experiments'
+
+        NODE_1_CORES = '0-23'
+        NODE_1_MEMORY = '0'
+        NODE_2_CORES = '24-47'
+        NODE_2_MEMORY = '1'
+    }
+    parameters {
+        choice(
+            name: 'SIGOPT_API_TOKEN',
+            choices: ['Eddie', 'Krzysztof'],
+            description: 'SigOpt API Token'
+        )
+        string(
+            name: 'EXPERIMENT_ID',
+            description: 'Experiment ID (if not provided, new experiment will be created)'
+        )
+
+        choice(
+            name: 'MODEL',
+            choices: ['gat', 'graphsage', 'rgcn'],
+            description: 'Model'
+        )
+        choice(
+            name: 'DATASET',
+            choices: ['ogbn-arxiv', 'ogbn-mag', 'ogbn-products', 'ogbn-proteins'],
+            description: 'Dataset'
+        )
+        choice(
+            name: 'TRAINING_METHOD',
+            choices: ['mini-batch', 'full-graph'],
+            description: 'Training Method'
+        )
+        choice(
+            name: 'OPTIMIZATION_TARGET',
+            choices: ['accuracy', 'speed'],
+            description: 'Optimization Target'
+        )
+    }
+    stages {
+        stage('Run Containers') {
+            parallel {
+                stage('Machine 1') {
+                    agent { label 'machine-01' }
+                    steps {
+                        runContainer(
+                            'dgl-sigopt-node-1', 
+                            env.IMAGE_NAME,
+                            env.NODE_1_CORES,
+                            env.NODE_1_MEMORY,
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
+                        )
+                        runContainer(
+                            'dgl-sigopt-node-2', 
+                            env.IMAGE_NAME,
+                            env.NODE_2_CORES,
+                            env.NODE_2_MEMORY,
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
+                        )
+                    }
+                }
+                stage('Machine 2') {
+                    agent { label 'machine-02' }
+                    steps {
+                        runContainer(
+                            'dgl-sigopt-node-1', 
+                            env.IMAGE_NAME,
+                            env.NODE_1_CORES,
+                            env.NODE_1_MEMORY,
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
+                        )
+                        runContainer(
+                            'dgl-sigopt-node-2',
+                            env.IMAGE_NAME,
+                            env.NODE_2_CORES,
+                            env.NODE_2_MEMORY,
+                            env.DATASET_VOLUME,
+                            env.LOGS_VOLUME
+                        )
+                    }
+                }
+            }
+        }
+        stage('Clone Repositories') {
+            parallel {
+                stage('Machine 1') {
+                    agent { label 'machine-01' }
+                    steps {
+                        cloneRepository('dgl-sigopt-node-1', env.REPOSITORY_URL)
+                        cloneRepository('dgl-sigopt-node-2', env.REPOSITORY_URL)
+                    }
+                }
+                stage('Machine 2') {
+                    agent { label 'machine-02' }
+                    steps {
+                        cloneRepository('dgl-sigopt-node-1', env.REPOSITORY_URL)
+                        cloneRepository('dgl-sigopt-node-2', env.REPOSITORY_URL)
+                    }
+                }
+            }
+        }
+        stage('Setup Experiment') {
+            agent { label 'machine-01' }
+            steps {
+                script {
+                    env.SIGOPT_API_TOKEN_ID = "sigopt-api-token-${params.SIGOPT_API_TOKEN.toLowerCase()}"
+
+                    withCredentials([string(
+                        credentialsId: env.SIGOPT_API_TOKEN_ID,
+                        variable: 'sigoptAPIToken'
+                    )]) {
+                        if (!env.EXPERIMENT_ID) {
+                            env.EXPERIMENT_ID = createExperiment(
+                                'dgl-sigopt-node-1',
+                                env.EXPERIMENT_WORK_DIR,
+                                sigoptAPIToken,
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
+                            )
+                        }
+                    }
+                }
+
+                // sh 'echo "Experiment ID: ${env.EXPERIMENT_ID}"'
+            }
+        }
+        stage('Orchestrate Experiment') {
+            parallel {
+                stage('Machine 1 - Node 1') {
+                    agent { label 'machine-01' }
+                    steps {
+                        withCredentials([string(
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
+                            variable: 'sigoptAPIToken'
+                        )]) {
+                            runExperiment(
+                                'dgl-sigopt-node-1',
+                                env.EXPERIMENT_WORK_DIR,
+                                sigoptAPIToken,
+                                env.EXPERIMENT_ID,
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
+                            )
+                        }
+                    }
+                }
+                stage('Machine 1 - Node 2') {
+                    agent { label 'machine-01' }
+                    steps {
+                        withCredentials([string(
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
+                            variable: 'sigoptAPIToken'
+                        )]) {
+                            runExperiment(
+                                'dgl-sigopt-node-2',
+                                env.EXPERIMENT_WORK_DIR,
+                                sigoptAPIToken,
+                                env.EXPERIMENT_ID,
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
+                            )
+                        }
+                    }
+                }
+                stage('Machine 2 - Node 1') {
+                    agent { label 'machine-02' }
+                    steps {
+                        withCredentials([string(
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
+                            variable: 'sigoptAPIToken'
+                        )]) {
+                            runExperiment(
+                                'dgl-sigopt-node-1',
+                                env.EXPERIMENT_WORK_DIR,
+                                sigoptAPIToken,
+                                env.EXPERIMENT_ID,
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
+                            )
+                        } 
+                    }
+                }
+                stage('Machine 2 - Node 2') {
+                    agent { label 'machine-02' }
+                    steps {
+                        withCredentials([string(
+                            credentialsId: env.SIGOPT_API_TOKEN_ID,
+                            variable: 'sigoptAPIToken'
+                        )]) {
+                            runExperiment(
+                                'dgl-sigopt-node-2',
+                                env.EXPERIMENT_WORK_DIR,
+                                sigoptAPIToken,
+                                env.EXPERIMENT_ID,
+                                params.MODEL,
+                                params.DATASET,
+                                params.TRAINING_METHOD,
+                                params.OPTIMIZATION_TARGET
+                            )
+                        } 
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            node('machine-01') {
+                sh 'docker stop dgl-sigopt-node-1'
+                sh 'docker stop dgl-sigopt-node-2'
+            }
+            node('machine-02') {
+                sh 'docker stop dgl-sigopt-node-1'
+                sh 'docker stop dgl-sigopt-node-2'
+            }
+        }
+    }
+}

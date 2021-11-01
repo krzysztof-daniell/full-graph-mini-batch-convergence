@@ -174,12 +174,12 @@ class EntityClassify(nn.Module):
         self,
         hg: dgl.DGLHeteroGraph,
         in_feats: int,
-        hidden_feats: int,
+        hidden_feats: Union[int, list[int]],
         out_feats: int,
         num_bases: int,
         num_layers: int,
         norm: str = 'right',
-        batch_norm: bool = False,
+        layer_norm: bool = False,
         input_dropout: float = 0,
         dropout: float = 0,
         activation: Callable[[torch.Tensor], torch.Tensor] = None,
@@ -193,6 +193,11 @@ class EntityClassify(nn.Module):
         self._rel_names = sorted(list(set(hg.etypes)))
         self._num_rels = len(self._rel_names)
 
+        if isinstance(hidden_feats, int):
+            self._hidden_feats = [hidden_feats for _ in range(num_layers - 1)]
+        else:
+            self._hidden_feats = hidden_feats
+
         if num_bases < 0 or num_bases > self._num_rels:
             self._num_bases = self._num_rels
         else:
@@ -202,17 +207,17 @@ class EntityClassify(nn.Module):
 
         self._layers.append(RelGraphConvLayer(
             in_feats,
-            hidden_feats,
+            self._hidden_feats[0],
             self._rel_names,
             self._num_bases,
             norm=norm,
             self_loop=self_loop,
         ))
 
-        for _ in range(1, num_layers - 1):
+        for i in range(1, num_layers - 1):
             self._layers.append(RelGraphConvLayer(
-                hidden_feats,
-                hidden_feats,
+                self._hidden_feats[i - 1],
+                self._hidden_feats[i],
                 self._rel_names,
                 self._num_bases,
                 norm=norm,
@@ -220,7 +225,7 @@ class EntityClassify(nn.Module):
             ))
 
         self._layers.append(RelGraphConvLayer(
-            hidden_feats,
+            self._hidden_feats[-1],
             out_feats,
             self._rel_names,
             self._num_bases,
@@ -228,13 +233,13 @@ class EntityClassify(nn.Module):
             self_loop=self_loop,
         ))
 
-        if batch_norm:
-            self._batch_norms = nn.ModuleList()
+        if layer_norm:
+            self._layer_norms = nn.ModuleList()
 
             for _ in range(num_layers - 1):
-                self._batch_norms.append(nn.BatchNorm1d(hidden_feats))
+                self._layer_norms.append(nn.LayerNorm(hidden_feats))
         else:
-            self._batch_norms = None
+            self._layer_norms = None
 
     def _apply_layers(
         self,
@@ -244,8 +249,8 @@ class EntityClassify(nn.Module):
         x = inputs
 
         for ntype, h in x.items():
-            if self._batch_norms is not None:
-                h = self._batch_norms[layer_idx](h)
+            if self._layer_norms is not None:
+                h = self._layer_norms[layer_idx](h)
 
             if self._activation is not None:
                 h = self._activation(h)

@@ -1,9 +1,11 @@
 import argparse
+import os
 from collections.abc import Callable
 from timeit import default_timer
 
 import dgl
 import sigopt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,31 +86,45 @@ def validate(
     return time, loss, score
 
 
-def run(args: argparse.ArgumentParser) -> None:
+def run(
+    args: argparse.ArgumentParser,
+    sigopt_context: sigopt.run_context = None,
+) -> None:
+
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
-        args.dataset,
-        root=args.dataset_root,
-    )
+        args.dataset, root=args.dataset_root)
     predict_category = dataset.predict_category
     labels = hg.nodes[predict_category].data['labels']
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    sigopt.params.setdefaults({
-        'embedding_lr': args.embedding_lr,
-        'model_lr': args.model_lr,
-        'hidden_feats': args.hidden_feats,
-        'num_bases': args.num_bases,
-        'num_layers': args.num_layers,
-        'norm': args.norm,
-        'batch_norm': int(args.batch_norm),
-        'activation': args.activation,
-        'input_dropout': args.input_dropout,
-        'dropout': args.dropout,
-        'self_loop': int(args.self_loop),
-    })
+    if sigopt_context is not None:
+        embedding_lr = sigopt_context.params.lr
+        model_lr = sigopt_context.params.lr
+        hidden_feats = sigopt_context.params.hidden_feats
+        num_bases = sigopt_context.params.num_bases
+        num_layers = sigopt_context.params.num_layers
+        norm = 'right'
+        layer_norm = bool(sigopt_context.params.layer_norm)
+        activation = sigopt_context.params.activation
+        input_dropout = sigopt_context.params.input_dropout
+        dropout = sigopt_context.params.dropout
+        self_loop = True
+    else:
+        embedding_lr = args.embedding_lr
+        model_lr = args.model_lr
+        hidden_feats = args.hidden_feats if len(
+            args.hidden_feats) > 1 else args.hidden_feats[0]
+        num_bases = args.num_bases
+        num_layers = args.num_layers
+        norm = args.norm
+        layer_norm = args.layer_norm
+        activation = args.activation
+        input_dropout = args.input_dropout
+        dropout = args.dropout
+        self_loop = args.self_loop
 
     in_feats = hg.nodes[predict_category].data['feat'].shape[-1]
     out_feats = dataset.num_classes
@@ -131,26 +147,29 @@ def run(args: argparse.ArgumentParser) -> None:
     model = EntityClassify(
         hg,
         in_feats,
-        sigopt.params.hidden_feats,
+        hidden_feats,
         out_feats,
-        sigopt.params.num_bases,
-        sigopt.params.num_layers,
-        norm=sigopt.params.norm,
-        batch_norm=bool(sigopt.params.batch_norm),
-        input_dropout=sigopt.params.input_dropout,
-        dropout=sigopt.params.dropout,
-        activation=activations[sigopt.params.activation],
-        self_loop=bool(sigopt.params.self_loop),
+        num_bases,
+        num_layers,
+        norm=norm,
+        layer_norm=layer_norm,
+        input_dropout=input_dropout,
+        dropout=dropout,
+        activation=activations[activation],
+        self_loop=self_loop,
     )
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(list(
-        embedding_layer.node_embeddings.parameters()), lr=sigopt.params.embedding_lr)
-    model_optimizer = torch.optim.Adam(
-        model.parameters(), lr=sigopt.params.model_lr)
+        embedding_layer.node_embeddings.parameters()), lr=embedding_lr)
+    model_optimizer = torch.optim.Adam(model.parameters(), lr=model_lr)
 
-    checkpoint = utils.Callback(args.early_stopping_patience,
-                                args.early_stopping_monitor)
+    checkpoint = utils.Callback(
+        args.early_stopping_patience,
+        args.early_stopping_monitor,
+        timeout=25_200,
+        log_checkpoint_every=np.ceil(args.num_epochs / 200),
+    )
 
     for epoch in range(args.num_epochs):
         train_time, train_loss, train_score = train(
@@ -185,6 +204,7 @@ def run(args: argparse.ArgumentParser) -> None:
             train_score,
             valid_score,
             {'embedding_layer': embedding_layer, 'model': model},
+            sigopt_context=sigopt_context,
         )
 
         print(
@@ -199,6 +219,10 @@ def run(args: argparse.ArgumentParser) -> None:
 
         if checkpoint.should_stop:
             print('!! Early Stopping !!')
+
+            break
+        elif checkpoint.timeout:
+            print('!! Timeout !!')
 
             break
 
@@ -224,17 +248,35 @@ def run(args: argparse.ArgumentParser) -> None:
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-        utils.log_metrics_to_sigopt(
-            checkpoint,
-            'RGCN',
-            args.dataset,
-            test_loss,
-            test_score,
-            test_time,
-        )
-    else:
-        # pass
-        utils.log_metrics_to_sigopt(checkpoint, 'RGCN', args.dataset)
+    if sigopt_context is not None:
+        metrics = {
+            'best epoch': checkpoint.best_epoch,
+            'best epoch - train loss': checkpoint.best_epoch_train_loss,
+            'best epoch - train score': checkpoint.best_epoch_train_accuracy,
+            'best epoch - valid loss': checkpoint.best_epoch_valid_loss,
+            'best epoch - valid score': checkpoint.best_epoch_valid_accuracy,
+            'best epoch - training time': checkpoint.best_epoch_training_time,
+            'avg train epoch time': np.mean(checkpoint.train_times),
+            'avg valid epoch time': np.mean(checkpoint.valid_times),
+            'experiment time': sum(checkpoint.train_times) + sum(checkpoint.valid_times),
+        }
+
+        if args.test_validation:
+            metrics['best epoch - test loss'] = test_loss
+            metrics['best epoch - test score'] = test_score
+            metrics['test epoch time'] = test_time
+
+        utils.log_metrics_to_sigopt(sigopt_context, checkpoint, **metrics)
+
+    if args.save_checkpoints_to_csv:
+        if sigopt_context is not None:
+            path = f'{args.checkpoints_path}_{sigopt_context.id}.csv'
+        elif args.checkpoints_path is None:
+            path = f'full_graph_{args.dataset.replace("-", "_")}.csv'
+        else:
+            path = args.checkpoints_path
+
+        utils.save_checkpoints_to_csv(checkpoint, path)
 
 
 if __name__ == '__main__':
@@ -242,18 +284,21 @@ if __name__ == '__main__':
 
     argparser.add_argument('--dataset', default='ogbn-mag', type=str,
                            choices=['ogbn-mag'])
-    argparser.add_argument('--dataset_root', default='dataset', type=str)
+    argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--num-epochs', default=500, type=int)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
+    argparser.add_argument('--experiment-id', default=None, type=str)
+    argparser.add_argument('--project-id', default="rgcn", type=str)
+    argparser.add_argument('--num-epochs', default=1000, type=int)
     argparser.add_argument('--embedding-lr', default=0.01, type=float)
     argparser.add_argument('--model-lr', default=0.01, type=float)
-    argparser.add_argument('--hidden-feats', default=64, type=int)
+    argparser.add_argument('--hidden-feats', default=[64], nargs='+', type=int)
     argparser.add_argument('--num-bases', default=2, type=int)
     argparser.add_argument('--num-layers', default=2, type=int)
     argparser.add_argument('--norm', default='right',
                            type=str, choices=['both', 'none', 'right'])
-    argparser.add_argument('--batch-norm', default=False,
+    argparser.add_argument('--layer-norm', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--input-dropout', default=0.1, type=float)
     argparser.add_argument('--dropout', default=0.5, type=float)
@@ -267,10 +312,31 @@ if __name__ == '__main__':
     argparser.add_argument('--test-validation', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--seed', default=13, type=int)
+    argparser.add_argument('--save-checkpoints-to-csv', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--checkpoints-path', default=None, type=str)
 
     args = argparser.parse_args()
 
     if args.download_dataset:
         utils.download_dataset(args.dataset)
 
-    run(args)
+    if args.experiment_id is not None:
+        if os.getenv('SIGOPT_API_TOKEN') is None:
+            raise ValueError(
+                'SigOpt API token is not provided. Please provide it by '
+                '--sigopt-api-token argument or set '
+                'SIGOPT_API_TOKEN environment variable.'
+            )
+
+        sigopt.set_project(args.project_id)
+        experiment = sigopt.get_experiment(args.experiment_id)
+
+        while not experiment.is_finished():
+            with experiment.create_run() as sigopt_context:
+                try:
+                    run(args, sigopt_context=sigopt_context)
+                except:
+                    sigopt_context.log_failure()
+    else:
+        run(args)

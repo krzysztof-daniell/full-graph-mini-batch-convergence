@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from copy import deepcopy
 from typing import Union
 
@@ -7,6 +8,7 @@ import dgl
 import dgl.function as fn
 import matplotlib.pyplot as plt
 import numpy as np
+import psutil
 import sigopt
 import torch
 import torch.nn as nn
@@ -80,7 +82,9 @@ class Callback:
         return self._valid_accuracies[self._best_epoch]
 
     @property
-    def best_epoch_model_parameters(self) -> Union[dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
+    def best_epoch_model_parameters(
+        self,
+    ) -> Union[dict[str, torch.Tensor], dict[str, dict[str, torch.Tensor]]]:
         return self._model_parameters
 
     @property
@@ -97,6 +101,7 @@ class Callback:
         train_accuracy: float,
         valid_accuracy: float,
         model: Union[nn.Module, dict[str, nn.Module]],
+        sigopt_context=None,
     ) -> None:
         self._train_times.append(train_time)
         self._valid_times.append(valid_time)
@@ -105,12 +110,13 @@ class Callback:
         self._train_accuracies.append(train_accuracy)
         self._valid_accuracies.append(valid_accuracy)
 
-        sigopt.log_checkpoint({
-            'train loss': train_loss,
-            'valid loss': valid_loss,
-            'train accuracy': train_accuracy,
-            'valid accuracy': valid_accuracy,
-        })
+        if sigopt_context is not None:
+            sigopt_context.log_checkpoint({
+                'train loss': train_loss,
+                'valid loss': valid_loss,
+                'train accuracy': train_accuracy,
+                'valid accuracy': valid_accuracy,
+            })
 
         best_epoch = False
 
@@ -174,46 +180,11 @@ def get_metrics_plot(
 
 
 def log_metrics_to_sigopt(
-    checkpoint: Callback,
-    model_name: str,
-    dataset: str,
-    test_loss: float = None,
-    test_accuracy: float = None,
-    test_time: float = None,
+    sigopt_context: sigopt.run_context,
+    **metrics,
 ) -> None:
-    sigopt.log_model(model_name)
-    sigopt.log_dataset(dataset)
-    sigopt.log_metric('best epoch', checkpoint.best_epoch)
-    sigopt.log_metric('best epoch - train loss',
-                      checkpoint.best_epoch_train_loss)
-    sigopt.log_metric('best epoch - train accuracy',
-                      checkpoint.best_epoch_train_accuracy)
-    sigopt.log_metric('best epoch - valid loss',
-                      checkpoint.best_epoch_valid_loss)
-    sigopt.log_metric('best epoch - valid accuracy',
-                      checkpoint.best_epoch_valid_accuracy)
-    sigopt.log_metric('best epoch - training time',
-                      checkpoint.best_epoch_training_time)
-    sigopt.log_metric('avg train epoch time', np.mean(checkpoint.train_times))
-    sigopt.log_metric('avg valid epoch time', np.mean(checkpoint.valid_times))
-
-    if test_loss is not None:
-        sigopt.log_metric('best epoch - test loss', test_loss)
-
-    if test_accuracy is not None:
-        sigopt.log_metric('best epoch - test accuracy', test_accuracy)
-
-    if test_time is not None:
-        sigopt.log_metric('test epoch time', test_time)
-
-    metrics_plot = get_metrics_plot(
-        checkpoint.train_accuracies,
-        checkpoint.valid_accuracies,
-        checkpoint.train_losses,
-        checkpoint.valid_losses,
-    )
-
-    sigopt.log_image(metrics_plot, name='convergence plot')
+    for name, value in metrics.items():
+        sigopt_context.log_metric(name=name, value=value)
 
 
 def download_dataset(dataset: str) -> None:
@@ -378,17 +349,34 @@ def process_dataset(
 
 
 def set_sigopt_fanouts(fanouts: str) -> list[int]:
-    result = [int(i) for i in fanouts.split(',')]
+    default_fanouts = [int(i) for i in fanouts.split(',')]
+    sigopt_fanouts = []
 
-    for i in reversed(range(len(result))):
-        sigopt.params.setdefaults({f'layer_{i + 1}_fanout': result[i]})
+    for i in range(sigopt.get_parameter('num_layers', default=len(default_fanouts))):
+        if i < len(default_fanouts):
+            fanout = sigopt.get_parameter(
+                f'layer_{i + 1}_fanout', default=default_fanouts[i])
+        else:
+            fanout = sigopt.get_parameter(f'layer_{i + 1}_fanout')
 
-        result.pop(i)
+        sigopt_fanouts.append(fanout)
 
-    for i in range(sigopt.params.num_layers):
-        result.append(sigopt.params[f'layer_{i + 1}_fanout'])
+    return sigopt_fanouts
 
-    return result
+
+def log_system_info() -> None:
+    # https://psutil.readthedocs.io/en/latest/#processes
+    process = psutil.Process()
+    virtual_memory = psutil.virtual_memory()
+    sigopt.log_metadata("Python version", sys.version.split()[0])
+    sigopt.log_metadata("Operating System", sys.platform)
+    sigopt.log_metadata("psutil.Process().num_threads", process.num_threads())
+    # run.log_metadata("Process CPU Percent", process.cpu_percent())
+    sigopt.log_metadata("psutil.virtual_memory().total",
+                        psutil._common.bytes2human(virtual_memory.total))
+    sigopt.log_metadata("psutil.virtual_memory().available",
+                        psutil._common.bytes2human(virtual_memory.available))
+    # run.log_metadata("Virtual Memory Percent", virtual_memory.percent)
 
 
 def get_evaluation_score(
@@ -409,3 +397,10 @@ def get_evaluation_score(
     }).popitem()
 
     return score
+
+
+def is_experiment_finished(experiment) -> bool:
+    observation_count = experiment.fetch().progress.observation_count
+    observation_budget = experiment.fetch().observation_budget
+
+    return observation_count <= observation_budget
