@@ -337,6 +337,9 @@ if __name__ == '__main__':
                 try:
                     run(args, sigopt_context=sigopt_context)
                 except:
+                    print(f"Exception occurred: '{e}'")
                     sigopt_context.log_failure()
+                    import sys
+                    sys.exit()
     else:
         run(args)
