@@ -6,6 +6,7 @@ docker run \
   -it \
   --volume /home/jenkins/volumes/dgl_sigopt_jenkins_certs:/certs/client \
   --volume /home/jenkins/volumes/dgl_sigopt_jenkins_home:/var/jenkins_home \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
   --publish 8080:8080 \
   --publish 50000:50000 \
   --name dgl-sigopt-jenkins \
