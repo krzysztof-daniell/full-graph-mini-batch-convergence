@@ -11,7 +11,7 @@ def run_experiment(args: argparse.ArgumentParser):
         arguments.append(f'--experiment-id {args.experiment_id}')
 
     if args.dataset == 'ogbn-products':
-        arguments.append('--self-loop')
+        arguments.append('--graph-self-loop')
 
     if args.dataset_root is not None:
         arguments.append(f'--dataset-root {args.dataset_root}')
