@@ -1,19 +1,29 @@
-name: rgcn - ogbn-mag - full-graph - accuracy
+# ogbn_mag_mini_batch_speed.yml
+name: rgcn - ogbn-mag - mini batch - speed
 parameters: 
-  - name: lr
+  - name: embedding_lr
     type: double
     transformation: log
     bounds:
       min: 0.001
       max: 0.1
+  - name: model_lr
+    type: double
+    transformation: log
+    bounds:
+      min: 0.001
+      max: 0.02 # 0.1
   - name: num_layers
     type: int
     bounds:
       min: 2
-      max: 4
+      max: 3
   - name: hidden_feats
     type: int
-    grid: [64, 128, 192, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024]
+    bounds:
+      min: 50
+      max: 500
+    # grid: [64, 128, 192, 256, 320, 384, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1024]
   - name: num_bases
     type: int
     bounds:
@@ -27,10 +37,16 @@ parameters:
     categorical_values: [leaky_relu, relu]
   - name: input_dropout
     type: double
-    grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    bounds:
+      min: 0.25
+      max: 0.75
+    # grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
   - name: dropout
     type: double
-    grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    bounds:
+      min: 0.1
+      max: 0.4
+    # grid: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
 metrics:
   - name: best epoch 
     strategy: store
@@ -42,13 +58,15 @@ metrics:
     strategy: store
     objective: maximize
   - name: best epoch - valid loss
-    strategy: optimize
+    strategy: constraint
     objective: minimize
+    theshold: 1.79875920892 # https://app.sigopt.com/run/113497 * 1.01
   - name: best epoch - valid score
-    strategy: store
+    strategy: constraint
     objective: maximize
+    threshold: 0.50956488231 # https://app.sigopt.com/run/113497 * 0.99
   - name: best epoch - training time
-    strategy: store
+    strategy: optimize
     objective: minimize
   - name: avg train epoch time
     strategy: store
@@ -56,7 +74,7 @@ metrics:
   - name: avg valid epoch time
     strategy: store
     objective: minimize
-  - name: run time
+  - name: experiment time
     strategy: constraint
     objective: minimize
     threshold: 25200
