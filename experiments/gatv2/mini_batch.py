@@ -217,16 +217,6 @@ def run(
         num_workers=4,
     )
 
-    # valid_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(1)
-    # valid_dataloader = dgl.dataloading.NodeDataLoader(
-    #     g,
-    #     valid_sampler,
-    #     batch_size=batch_size,
-    #     shuffle=False,
-    #     drop_last=False,
-    #     num_workers=4,
-    # )
-
     in_feats = g.ndata['feat'].shape[-1]
     out_feats = dataset.num_classes
 
