@@ -94,7 +94,7 @@ def run(
         lr = sigopt_context.params.lr
         hidden_feats = sigopt_context.params.hidden_feats
         num_layers = sigopt_context.params.num_layers
-        aggregator_type = sigopt_context.params.aggregator_type
+        aggregator_type = "gcn" # sigopt_context.params.aggregator_type
         batch_norm = sigopt_context.params.batch_norm
         activation = sigopt_context.params.activation
         input_dropout = sigopt_context.params.input_dropout
@@ -106,7 +106,7 @@ def run(
         hidden_feats = args.hidden_feats if len(
             args.hidden_feats) > 1 else args.hidden_feats[0]
         num_layers = args.num_layers
-        aggregator_type = args.aggregator_type
+        aggregator_type = "gcn" # args.aggregator_type
         batch_norm = args.batch_norm
         activation = args.activation
         input_dropout = args.input_dropout
