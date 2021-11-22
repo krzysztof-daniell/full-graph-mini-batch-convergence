@@ -41,7 +41,7 @@ if __name__ == '__main__':
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--model', type=str,
-                           choices=['gat', 'graphsage', 'rgcn'])
+                           choices=['gatv2', 'graphsage', 'rgcn'])
     argparser.add_argument('--dataset', type=str,
                            choices=['ogbn-arxiv', 'ogbn-mag', 'ogbn-products', 'ogbn-proteins'])
     argparser.add_argument('--dataset-root', default=None, type=str)
