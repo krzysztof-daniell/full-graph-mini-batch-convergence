@@ -60,7 +60,7 @@ metrics:
   - name: best epoch - valid loss
     strategy: constraint
     objective: minimize
-    theshold: 1.79875920892 # https://app.sigopt.com/run/113497 * 1.01
+    threshold: 1.79875920892 # https://app.sigopt.com/run/113497 * 1.01
   - name: best epoch - valid score
     strategy: constraint
     objective: maximize
