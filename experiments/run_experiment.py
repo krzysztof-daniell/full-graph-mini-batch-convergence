@@ -10,16 +10,16 @@ def run_experiment(args: argparse.ArgumentParser):
     if args.experiment_id is not None:
         arguments.append(f'--experiment-id {args.experiment_id}')
 
-    if args.dataset == 'ogbn-products':
+    if args.dataset == 'ogbn-arxiv':
+        arguments.append('--graph-reverse-edges')
+
+    if args.dataset in ['ogbn-products', 'ogbn-arxiv']:
         arguments.append('--graph-self-loop')
 
     if args.dataset_root is not None:
         arguments.append(f'--dataset-root {args.dataset_root}')
 
-    if args.optimization_target == 'speed':
-        arguments.append('--test-validation')
-    elif args.optimization_target == 'accuracy':
-        arguments.append('--no-test-validation')
+    arguments.append('--no-test-validation')
 
     if args.checkpoints_path is not None:
         arguments.append('--save-checkpoints-to-csv')
