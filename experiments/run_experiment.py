@@ -19,7 +19,7 @@ def run_experiment(args: argparse.ArgumentParser):
     if args.dataset_root is not None:
         arguments.append(f'--dataset-root {args.dataset_root}')
 
-    arguments.append('--no-test-validation')
+    arguments.append('--test-validation')
 
     if args.checkpoints_path is not None:
         arguments.append('--save-checkpoints-to-csv')
