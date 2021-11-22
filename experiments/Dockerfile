@@ -7,8 +7,9 @@ COPY ./requirements.txt ./
 RUN apt-get update && apt-get install -y cmake \
   && apt-get update && apt-get install -y build-essential \
   && pip install --no-cache-dir -r requirements.txt \
-  && git clone --recurse-submodules https://github.com/dmlc/dgl.git \
-  && mkdir -p dgl/build && cd dgl/build \
+  && git clone --recurse-submodules https://github.com/ksadowski13/dgl.git \
+  && cd dgl && git checkout gatv2-fix-residual \
+  && mkdir build && cd build \
   && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_CPP_TEST=1 && make -j14 \
   && cd .. && pip install -e python/
 
