@@ -1,4 +1,4 @@
-name: gatv2 - ogbn-products - mini-batch - accuracy
+name: gatv2 - ogbn-arxiv - mini-batch - accuracy
 parameters: 
   - name: lr
     type: double

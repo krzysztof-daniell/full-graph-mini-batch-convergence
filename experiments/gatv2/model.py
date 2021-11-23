@@ -42,6 +42,7 @@ class GATv2(nn.Module):
             residual=residual,
             allow_zero_in_degree=allow_zero_in_degree,
             bias=bias,
+            share_weights=True,
         ))
 
         for _ in range(1, num_layers - 1):
@@ -54,6 +55,7 @@ class GATv2(nn.Module):
                 residual=residual,
                 allow_zero_in_degree=allow_zero_in_degree,
                 bias=bias,
+                share_weights=True,
             ))
 
         self._layers.append(GATv2Conv(
@@ -65,6 +67,7 @@ class GATv2(nn.Module):
             residual=residual,
             allow_zero_in_degree=allow_zero_in_degree,
             bias=bias,
+            share_weights=True,
         ))
 
         if batch_norm:

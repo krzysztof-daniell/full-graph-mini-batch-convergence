@@ -85,70 +85,14 @@ def validate(
     return time, loss, score
 
 
-def validate(
-    model: nn.Module,
-    loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-    evaluator: Evaluator,
-    g: dgl.DGLGraph,
-    mask: torch.Tensor,
-) -> tuple[float]:
-    model.eval()
+def normalize_features(g: dgl.DGLGraph, inputs: torch.Tensor) -> torch.Tensor:
+    degrees = g.in_degrees().float().clamp(min=1)
+    norm = torch.pow(degrees, -0.5)
+    norm = norm.to(inputs.device).unsqueeze(1)
 
-    start = default_timer()
+    x = inputs * norm
 
-    inputs = g.ndata['feat']
-    labels = g.ndata['label'][mask]
-
-    with torch.no_grad():
-        logits = model(g, inputs)[mask]
-
-        loss = loss_function(logits, labels)
-        score = utils.get_evaluation_score(evaluator, logits, labels)
-
-    stop = default_timer()
-    time = stop - start
-
-    loss = loss.item()
-
-    return time, loss, score
-
-
-def set_fanouts(
-    num_layers: int,
-    batch_size: int,
-    max_num_batch_nodes: int,
-    fanout_slope: float,
-    max_fanout: int = 40,
-) -> list[int]:
-    result_fanouts = None
-
-    for base_fanout in range(max_fanout + 1):
-        fanouts = []
-
-        for n in range(num_layers):
-            fanout = int((fanout_slope ** n) * base_fanout)
-
-            if fanout < 1:
-                fanout = 1
-
-            if fanout > max_fanout:
-                break
-
-            fanouts.append(fanout)
-
-        if len(fanouts) == num_layers:
-            result = batch_size
-
-            for fanout in reversed(fanouts):
-                result += result * fanout
-
-            if result <= max_num_batch_nodes:
-                result_fanouts = fanouts
-
-    if result_fanouts is None:
-        result_fanouts = [1 for _ in range(num_layers)]
-
-    return result_fanouts
+    return x
 
 
 def run(
@@ -163,6 +107,9 @@ def run(
         reverse_edges=args.graph_reverse_edges,
         self_loop=args.graph_self_loop,
     )
+
+    if args.graph_normalize_features:
+        g.ndata['feat'] = normalize_features(g, g.ndata['feat'])
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -180,7 +127,7 @@ def run(
         activation = sigopt_context.params.activation
         bias = bool(sigopt_context.params.bias)
         batch_size = sigopt_context.params.batch_size
-        fanouts = set_fanouts(
+        fanouts = utils.set_fanouts(
             num_layers,
             batch_size,
             sigopt_context.params['max_batch_num_nodes'],
@@ -352,6 +299,8 @@ if __name__ == '__main__':
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--graph-normalize-features', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--num-epochs', default=500, type=int)
     argparser.add_argument('--lr', default=0.001, type=float)
