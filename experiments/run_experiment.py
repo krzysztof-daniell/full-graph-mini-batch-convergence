@@ -19,7 +19,7 @@ def run_experiment(args: argparse.ArgumentParser):
     if args.dataset_root is not None:
         arguments.append(f'--dataset-root {args.dataset_root}')
 
-    if args.model != 'rgcn':
+    if args.model == 'gatv2':
         arguments.append('--test-validation')
     else:
         arguments.append('--no-test-validation')
