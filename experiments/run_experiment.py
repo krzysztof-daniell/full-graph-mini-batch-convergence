@@ -19,7 +19,10 @@ def run_experiment(args: argparse.ArgumentParser):
     if args.dataset_root is not None:
         arguments.append(f'--dataset-root {args.dataset_root}')
 
-    arguments.append('--test-validation')
+    if args.model != 'rgcn':
+        arguments.append('--test-validation')
+    else:
+        arguments.append('--no-test-validation')
 
     if args.checkpoints_path is not None:
         arguments.append('--save-checkpoints-to-csv')

@@ -2,4 +2,5 @@ __pycache__
 .vscode
 dataset
 dgl
-scratch.py
+scratch*.py
+scratch*.ipynb
