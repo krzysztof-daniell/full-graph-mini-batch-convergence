@@ -126,6 +126,7 @@ def run(
         residual = bool(sigopt_context.params.residual)
         activation = sigopt_context.params.activation
         bias = bool(sigopt_context.params.bias)
+        share_weights = bool(sigopt_context.params.share_weights)
         batch_size = sigopt_context.params.batch_size
         fanouts = utils.set_fanouts(
             num_layers,
@@ -150,6 +151,7 @@ def run(
         residual = args.residual
         activation = args.activation
         bias = args.bias
+        share_weights = args.share_weights
         batch_size = args.batch_size
         fanouts = args.fanouts
 
@@ -183,6 +185,7 @@ def run(
         residual=residual,
         activation=activations[activation],
         bias=bias,
+        share_weights=share_weights,
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -318,6 +321,8 @@ if __name__ == '__main__':
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['leaky_relu', 'relu'])
     argparser.add_argument('--bias', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--share-weights', default=True,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--batch-size', default=512, type=int)
     argparser.add_argument('--fanouts', default=[5, 10, 15],

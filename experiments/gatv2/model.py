@@ -23,6 +23,7 @@ class GATv2(nn.Module):
         activation: Callable[[torch.Tensor], torch.Tensor] = None,
         allow_zero_in_degree: bool = True,
         bias: bool = True,
+        share_weights: bool = False,
     ):
         super().__init__()
         self._num_layers = num_layers
@@ -42,7 +43,7 @@ class GATv2(nn.Module):
             residual=residual,
             allow_zero_in_degree=allow_zero_in_degree,
             bias=bias,
-            share_weights=True,
+            share_weights=share_weights,
         ))
 
         for _ in range(1, num_layers - 1):
@@ -55,7 +56,7 @@ class GATv2(nn.Module):
                 residual=residual,
                 allow_zero_in_degree=allow_zero_in_degree,
                 bias=bias,
-                share_weights=True,
+                share_weights=share_weights,
             ))
 
         self._layers.append(GATv2Conv(
@@ -67,7 +68,7 @@ class GATv2(nn.Module):
             residual=residual,
             allow_zero_in_degree=allow_zero_in_degree,
             bias=bias,
-            share_weights=True,
+            share_weights=share_weights,
         ))
 
         if batch_norm:

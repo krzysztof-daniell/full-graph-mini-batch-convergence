@@ -42,6 +42,9 @@ parameters:
   - name: bias
     type: int
     grid: [0, 1]
+  - name: share_weights
+    type: int
+    grid: [0, 1]
   - name: batch_size
     type: int
     grid: [256, 512, 768, 1024, 1536, 2048]
