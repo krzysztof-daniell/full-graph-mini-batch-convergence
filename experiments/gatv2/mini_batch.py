@@ -1,5 +1,4 @@
 import argparse
-import os
 from timeit import default_timer
 from typing import Callable, Union
 
@@ -12,7 +11,7 @@ import torch.nn.functional as F
 from ogb.nodeproppred import Evaluator
 
 import utils
-from model import GraphSAGE
+from model import GATv2
 
 
 def train(
@@ -86,6 +85,16 @@ def validate(
     return time, loss, score
 
 
+def normalize_features(g: dgl.DGLGraph, inputs: torch.Tensor) -> torch.Tensor:
+    degrees = g.in_degrees().float().clamp(min=1)
+    norm = torch.pow(degrees, -0.5)
+    norm = norm.to(inputs.device).unsqueeze(1)
+
+    x = inputs * norm
+
+    return x
+
+
 def run(
     args: argparse.ArgumentParser,
     sigopt_context: sigopt.run_context = None,
@@ -99,52 +108,62 @@ def run(
         self_loop=args.graph_self_loop,
     )
 
+    if args.graph_normalize_features:
+        g.ndata['feat'] = normalize_features(g, g.ndata['feat'])
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        lr = sigopt_context.params['lr']
-        num_layers = sigopt_context.params['num_layers']
-        hidden_feats = sigopt_context.params['hidden_feats']
-        aggregator_type = 'mean' # sigopt_context.params['aggregator_type']
-        batch_norm = 0 # sigopt_context.params['batch_norm']
-        activation = 'leaky_relu' # sigopt_context.params['activation']
-        input_dropout = sigopt_context.params['input_dropout']
-        dropout = sigopt_context.params['dropout']
-        batch_size = sigopt_context.params['batch_size']
+        lr = sigopt_context.params.lr
+        hidden_feats = sigopt_context.params.hidden_feats
+        num_heads = sigopt_context.params.num_heads
+        num_layers = sigopt_context.params.num_layers
+        batch_norm = bool(sigopt_context.params.batch_norm)
+        input_dropout = sigopt_context.params.input_dropout
+        attn_dropout = sigopt_context.params.attn_dropout
+        dropout = sigopt_context.params.dropout
+        negative_slope = sigopt_context.params.negative_slope
+        residual = bool(sigopt_context.params.residual)
+        activation = sigopt_context.params.activation
+        bias = bool(sigopt_context.params.bias)
+        share_weights = bool(sigopt_context.params.share_weights)
+        batch_size = sigopt_context.params.batch_size
         fanouts = utils.set_fanouts(
             num_layers,
             batch_size,
             sigopt_context.params['max_batch_num_nodes'],
             sigopt_context.params['fanout_slope'],
         )
-
         sigopt_context.log_metadata(
             'fanouts', ','.join([str(i) for i in fanouts]))
-
         print(f'{sigopt_context.params = }')
         print(f'{fanouts = }')
     else:
         lr = args.lr
+        hidden_feats = args.hidden_feats
+        num_heads = args.num_heads
         num_layers = args.num_layers
-        hidden_feats = args.hidden_feats if len(
-            args.hidden_feats) > 1 else args.hidden_feats[0]
-        aggregator_type = args.aggregator_type
         batch_norm = args.batch_norm
-        activation = args.activation
         input_dropout = args.input_dropout
+        attn_dropout = args.attn_dropout
         dropout = args.dropout
+        negative_slope = args.negative_slope
+        residual = args.residual
+        activation = args.activation
+        bias = args.bias
+        share_weights = args.share_weights
         batch_size = args.batch_size
         fanouts = args.fanouts
 
-    sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
+    train_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts=fanouts)
     train_dataloader = dgl.dataloading.NodeDataLoader(
         g,
         train_idx,
-        sampler,
+        train_sampler,
         batch_size=batch_size,
         shuffle=True,
         drop_last=False,
-        num_workers=args.num_workers,
+        num_workers=4,
     )
 
     in_feats = g.ndata['feat'].shape[-1]
@@ -152,16 +171,21 @@ def run(
 
     activations = {'leaky_relu': F.leaky_relu, 'relu': F.relu}
 
-    model = GraphSAGE(
+    model = GATv2(
         in_feats,
         hidden_feats,
         out_feats,
+        num_heads,
         num_layers,
-        aggregator_type=aggregator_type,
         batch_norm=batch_norm,
         input_dropout=input_dropout,
+        attn_dropout=attn_dropout,
         dropout=dropout,
+        negative_slope=negative_slope,
+        residual=residual,
         activation=activations[activation],
+        bias=bias,
+        share_weights=share_weights,
     ).to(device)
 
     if args.dataset == 'ogbn-proteins':
@@ -265,36 +289,44 @@ def run(
 
 
 if __name__ == '__main__':
-    argparser = argparse.ArgumentParser('GraphSAGE NS Optimization')
+    argparser = argparse.ArgumentParser('GATv2 NS Optimization')
 
     argparser.add_argument('--dataset', default='ogbn-products', type=str,
                            choices=['ogbn-arxiv', 'ogbn-products', 'ogbn-proteins'])
     argparser.add_argument('--dataset-root', default='dataset', type=str)
     argparser.add_argument('--download-dataset', default=False,
                            action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
-    argparser.add_argument('--project-id', default="graphsage", type=str)
+    argparser.add_argument('--project-id', default="gat", type=str)
     argparser.add_argument('--graph-reverse-edges', default=False,
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--graph-self-loop', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--num-epochs', default=200, type=int)
-    argparser.add_argument('--lr', default=0.003, type=float)
-    argparser.add_argument('--hidden-feats', default=[256],
-                           nargs='+', type=int) 
+    argparser.add_argument('--graph-normalize-features', default=False,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--num-epochs', default=500, type=int)
+    argparser.add_argument('--lr', default=0.001, type=float)
+    argparser.add_argument('--hidden-feats', default=128, type=int)
+    argparser.add_argument('--num-heads', default=4, type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
-    argparser.add_argument('--aggregator-type', default='mean',
-                           type=str, choices=['gcn', 'mean'])
     argparser.add_argument('--batch-norm', default=False,
                            action=argparse.BooleanOptionalAction)
-    argparser.add_argument('--input-dropout', default=0.1, type=float)
-    argparser.add_argument('--dropout', default=0.5, type=float)
+    argparser.add_argument('--input-dropout', default=0, type=float)
+    argparser.add_argument('--attn-dropout', default=0, type=float)
+    argparser.add_argument('--dropout', default=0, type=float)
+    argparser.add_argument('--negative-slope', default=0.2, type=float)
+    argparser.add_argument('--residual', default=False,
+                           action=argparse.BooleanOptionalAction)
     argparser.add_argument('--activation', default='relu',
                            type=str, choices=['leaky_relu', 'relu'])
-    argparser.add_argument('--batch-size', default=1000, type=int)
+    argparser.add_argument('--bias', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--share-weights', default=True,
+                           action=argparse.BooleanOptionalAction)
+    argparser.add_argument('--batch-size', default=512, type=int)
     argparser.add_argument('--fanouts', default=[5, 10, 15],
                            nargs='+', type=str)
-    argparser.add_argument('--num-workers', default=4, type=int)
     argparser.add_argument('--early-stopping-patience', default=10, type=int)
     argparser.add_argument('--early-stopping-monitor',
                            default='loss', type=str)
@@ -304,7 +336,6 @@ if __name__ == '__main__':
                            action=argparse.BooleanOptionalAction)
     argparser.add_argument('--checkpoints-path',
                            default='checkpoints', type=str)
-
     argparser.add_argument('--seed', default=13, type=int)
 
     args = argparser.parse_args()
@@ -313,13 +344,6 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if os.getenv('SIGOPT_API_TOKEN') is None:
-            raise ValueError(
-                'SigOpt API token is not provided. Please provide it by '
-                '--sigopt-api-token argument or set '
-                'SIGOPT_API_TOKEN environment variable.'
-            )
-
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
 
@@ -328,9 +352,7 @@ if __name__ == '__main__':
                 try:
                     run(args, sigopt_context=sigopt_context)
                 except Exception as e:
-                    print(f"Exception occurred: '{e}'")
+                    sigopt_context.log_metadata('exception', e)
                     sigopt_context.log_failure()
-                    import sys
-                    sys.exit()
     else:
         run(args)

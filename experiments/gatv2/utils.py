@@ -68,7 +68,7 @@ class Callback:
 
     @property
     def best_epoch_training_time(self) -> float:
-        return sum(self._train_times[:self._best_epoch + 1])
+        return sum(self._train_times[:self.best_epoch])
 
     @property
     def best_epoch_train_loss(self) -> float:

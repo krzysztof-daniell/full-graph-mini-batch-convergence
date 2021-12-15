@@ -10,12 +10,18 @@ def run_experiment(args: argparse.ArgumentParser):
     if args.experiment_id is not None:
         arguments.append(f'--experiment-id {args.experiment_id}')
 
+    if args.dataset == 'ogbn-arxiv':
+        arguments.append('--graph-reverse-edges')
+
+    if args.dataset in ['ogbn-products', 'ogbn-arxiv']:
+        arguments.append('--graph-self-loop')
+
     if args.dataset_root is not None:
         arguments.append(f'--dataset-root {args.dataset_root}')
 
-    if args.optimization_target == 'speed':
+    if args.model == 'gatv2':
         arguments.append('--test-validation')
-    elif args.optimization_target == 'accuracy':
+    else:
         arguments.append('--no-test-validation')
 
     if args.checkpoints_path is not None:
@@ -38,7 +44,7 @@ if __name__ == '__main__':
     argparser.add_argument('--sigopt-api-token', default=None, type=str)
     argparser.add_argument('--experiment-id', default=None, type=str)
     argparser.add_argument('--model', type=str,
-                           choices=['gat', 'graphsage', 'rgcn'])
+                           choices=['gatv2', 'graphsage', 'rgcn'])
     argparser.add_argument('--dataset', type=str,
                            choices=['ogbn-arxiv', 'ogbn-mag', 'ogbn-products', 'ogbn-proteins'])
     argparser.add_argument('--dataset-root', default=None, type=str)

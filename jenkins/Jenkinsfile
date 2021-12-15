@@ -116,7 +116,7 @@ pipeline {
 
         choice(
             name: 'MODEL',
-            choices: ['gat', 'graphsage', 'rgcn'],
+            choices: ['gatv2', 'graphsage', 'rgcn'],
             description: 'Model'
         )
         choice(
