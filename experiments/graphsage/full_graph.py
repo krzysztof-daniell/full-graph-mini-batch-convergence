@@ -1,5 +1,4 @@
 import argparse
-import os
 from timeit import default_timer
 from typing import Callable
 
@@ -91,14 +90,14 @@ def run(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        lr = sigopt_context.params.lr
-        hidden_feats = sigopt_context.params.hidden_feats
-        num_layers = sigopt_context.params.num_layers
-        aggregator_type = "gcn" # sigopt_context.params.aggregator_type
-        batch_norm = sigopt_context.params.batch_norm
-        activation = sigopt_context.params.activation
-        input_dropout = sigopt_context.params.input_dropout
-        dropout = sigopt_context.params.dropout
+        lr = sigopt_context.params['lr']
+        hidden_feats = sigopt_context.params['hidden_feats']
+        num_layers = sigopt_context.params['num_layers']
+        aggregator_type = sigopt_context.params.get('aggregator_type', 'gcn')
+        batch_norm = sigopt_context.params['batch_norm']
+        activation = sigopt_context.params['activation']
+        input_dropout = sigopt_context.params['input_dropout']
+        dropout = sigopt_context.params['dropout']
 
         print(f'{sigopt_context.params = }')
     else:
@@ -106,7 +105,7 @@ def run(
         hidden_feats = args.hidden_feats if len(
             args.hidden_feats) > 1 else args.hidden_feats[0]
         num_layers = args.num_layers
-        aggregator_type = "gcn" # args.aggregator_type
+        aggregator_type = args.aggregator_type
         batch_norm = args.batch_norm
         activation = args.activation
         input_dropout = args.input_dropout
@@ -192,7 +191,6 @@ def run(
             f'Test Epoch Time: {test_time:.2f}'
         )
 
-
     if sigopt_context is not None:
         metrics = {
             'best epoch': checkpoint.best_epoch,
@@ -269,13 +267,6 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if os.getenv('SIGOPT_API_TOKEN') is None:
-            raise ValueError(
-                'SigOpt API token is not provided. Please provide it by '
-                '--sigopt-api-token argument or set '
-                'SIGOPT_API_TOKEN environment variable.'
-            )
-
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
 
@@ -284,9 +275,10 @@ if __name__ == '__main__':
                 try:
                     run(args, sigopt_context=sigopt_context)
                 except Exception as e:
-                    print(f"Exception occurred: '{e}'")
+                    sigopt_context.log_metadata('exception', e)
                     sigopt_context.log_failure()
-                    import sys
-                    sys.exit()
+
+                    print(f'Exception occurred: \'{e}\'')
+
     else:
         run(args)
