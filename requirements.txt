@@ -1,4 +1,0 @@
-torch
-dgl
-ogb
-git+https://github.com/sigopt/sigopt-python@sj/main
