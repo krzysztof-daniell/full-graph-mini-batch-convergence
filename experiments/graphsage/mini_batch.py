@@ -1,5 +1,4 @@
 import argparse
-import os
 from timeit import default_timer
 from typing import Callable, Union
 
@@ -105,9 +104,9 @@ def run(
         lr = sigopt_context.params['lr']
         num_layers = sigopt_context.params['num_layers']
         hidden_feats = sigopt_context.params['hidden_feats']
-        aggregator_type = 'mean' # sigopt_context.params['aggregator_type']
-        batch_norm = 0 # sigopt_context.params['batch_norm']
-        activation = 'leaky_relu' # sigopt_context.params['activation']
+        aggregator_type = sigopt_context.params.get('aggregator_type', 'mean')
+        batch_norm = bool(sigopt_context.params.get('batch_norm', 0))
+        activation = sigopt_context.params.get('activation', 'leaky_relu')
         input_dropout = sigopt_context.params['input_dropout']
         dropout = sigopt_context.params['dropout']
         batch_size = sigopt_context.params['batch_size']
@@ -281,7 +280,7 @@ if __name__ == '__main__':
     argparser.add_argument('--num-epochs', default=200, type=int)
     argparser.add_argument('--lr', default=0.003, type=float)
     argparser.add_argument('--hidden-feats', default=[256],
-                           nargs='+', type=int) 
+                           nargs='+', type=int)
     argparser.add_argument('--num-layers', default=3, type=int)
     argparser.add_argument('--aggregator-type', default='mean',
                            type=str, choices=['gcn', 'mean'])
@@ -313,13 +312,6 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if os.getenv('SIGOPT_API_TOKEN') is None:
-            raise ValueError(
-                'SigOpt API token is not provided. Please provide it by '
-                '--sigopt-api-token argument or set '
-                'SIGOPT_API_TOKEN environment variable.'
-            )
-
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
 
@@ -328,9 +320,10 @@ if __name__ == '__main__':
                 try:
                     run(args, sigopt_context=sigopt_context)
                 except Exception as e:
-                    print(f"Exception occurred: '{e}'")
+                    sigopt_context.log_metadata('exception', e)
                     sigopt_context.log_failure()
-                    import sys
-                    sys.exit()
+
+                    print(f'Exception occurred: \'{e}\'')
+
     else:
         run(args)

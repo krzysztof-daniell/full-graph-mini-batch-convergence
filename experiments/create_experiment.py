@@ -49,4 +49,4 @@ if __name__ == '__main__':
 
     experiment_id = create_experiment(args)
 
-    print(experiment_id)
+    print(f'SigOpt Experiment ID: {experiment_id}')

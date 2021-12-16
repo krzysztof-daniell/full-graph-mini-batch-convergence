@@ -196,7 +196,7 @@ def run(
 
     loss_function = nn.CrossEntropyLoss().to(device)
     embedding_optimizer = torch.optim.SparseAdam(
-        list(embedding_layer.node_embeddings.parameters()), 
+        list(embedding_layer.node_embeddings.parameters()),
         lr=embedding_lr
     )
     model_optimizer = torch.optim.Adam(model.parameters(), lr=model_lr)
@@ -362,13 +362,6 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if os.getenv('SIGOPT_API_TOKEN') is None:
-            raise ValueError(
-                'SigOpt API token is not provided. Please provide it by '
-                '--sigopt-api-token argument or set '
-                'SIGOPT_API_TOKEN environment variable.'
-            )
-
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
 
@@ -377,9 +370,10 @@ if __name__ == '__main__':
                 try:
                     run(args, sigopt_context=sigopt_context)
                 except Exception as e:
-                    print(f"Exception occurred: '{e}'")
+                    sigopt_context.log_metadata('exception', e)
                     sigopt_context.log_failure()
-                    import sys
-                    sys.exit()
+
+                    print(f'Exception occurred: \'{e}\'')
+
     else:
         run(args)

@@ -1,5 +1,4 @@
 import argparse
-import os
 from collections.abc import Callable
 from timeit import default_timer
 
@@ -90,7 +89,6 @@ def run(
     args: argparse.ArgumentParser,
     sigopt_context: sigopt.run_context = None,
 ) -> None:
-
     torch.manual_seed(args.seed)
 
     dataset, evaluator, hg, train_idx, valid_idx, test_idx = utils.process_dataset(
@@ -101,16 +99,16 @@ def run(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if sigopt_context is not None:
-        embedding_lr = sigopt_context.params.lr
-        model_lr = sigopt_context.params.lr
-        hidden_feats = sigopt_context.params.hidden_feats
-        num_bases = sigopt_context.params.num_bases
-        num_layers = sigopt_context.params.num_layers
+        embedding_lr = sigopt_context.params['lr']
+        model_lr = sigopt_context.params['lr']
+        hidden_feats = sigopt_context.params['hidden_feats']
+        num_bases = sigopt_context.params['num_bases']
+        num_layers = sigopt_context.params['num_layers']
         norm = 'right'
-        layer_norm = bool(sigopt_context.params.layer_norm)
-        activation = sigopt_context.params.activation
-        input_dropout = sigopt_context.params.input_dropout
-        dropout = sigopt_context.params.dropout
+        layer_norm = bool(sigopt_context.params['layer_norm'])
+        activation = sigopt_context.params['activation']
+        input_dropout = sigopt_context.params['input_dropout']
+        dropout = sigopt_context.params['dropout']
         self_loop = True
     else:
         embedding_lr = args.embedding_lr
@@ -322,13 +320,6 @@ if __name__ == '__main__':
         utils.download_dataset(args.dataset)
 
     if args.experiment_id is not None:
-        if os.getenv('SIGOPT_API_TOKEN') is None:
-            raise ValueError(
-                'SigOpt API token is not provided. Please provide it by '
-                '--sigopt-api-token argument or set '
-                'SIGOPT_API_TOKEN environment variable.'
-            )
-
         sigopt.set_project(args.project_id)
         experiment = sigopt.get_experiment(args.experiment_id)
 
@@ -336,10 +327,11 @@ if __name__ == '__main__':
             with experiment.create_run() as sigopt_context:
                 try:
                     run(args, sigopt_context=sigopt_context)
-                except:
-                    print(f"Exception occurred: '{e}'")
+                except Exception as e:
+                    sigopt_context.log_metadata('exception', e)
                     sigopt_context.log_failure()
-                    import sys
-                    sys.exit()
+
+                    print(f'Exception occurred: \'{e}\'')
+
     else:
         run(args)
